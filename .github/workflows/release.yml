@@ -1,0 +1,229 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version to release (e.g. 1.2.3, without v prefix)"
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: ${{ github.repository_owner }}
+
+permissions: { }
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1a. Automatic release via go-semantic-release (push to main only).
+  # ---------------------------------------------------------------------------
+  release:
+    name: Semantic Release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      released: ${{ steps.release.outputs.released }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Run semantic release
+        id: release
+        uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f # v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          allow-initial-development-versions: true
+          changelog-file: CHANGELOG.md
+
+
+  # ---------------------------------------------------------------------------
+  # 1b. Manual release via workflow_dispatch. Creates a tag and GitHub release
+  #     so the downstream flow is identical to an automatic release.
+  # ---------------------------------------------------------------------------
+  manual-release:
+    name: Manual Release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.validate.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate and prepare version
+        id: validate
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: |
+          VERSION="${INPUT_VERSION#v}"
+
+          if ! echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Invalid semver: ${VERSION}. Expected format: 1.2.3"
+            exit 1
+          fi
+
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "::error::Tag v${VERSION} already exists."
+            exit 1
+          fi
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.validate.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --title "v${VERSION}" \
+            --generate-notes
+
+  # ---------------------------------------------------------------------------
+  # 2. Resolve version – single source of truth for all downstream jobs.
+  #    Uses always() because exactly one of release/manual-release will be
+  #    skipped depending on the trigger event.
+  # ---------------------------------------------------------------------------
+  resolve-version:
+    name: Resolve Version
+    needs: [ release, manual-release ]
+    if: >-
+      always() &&
+      (needs.release.result == 'success' || needs.release.result == 'skipped') &&
+      (needs.manual-release.result == 'success' || needs.manual-release.result == 'skipped')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      semver: ${{ steps.resolve.outputs.semver }}
+    steps:
+      - name: Determine version string
+        id: resolve
+        run: |
+          if [ -n "${{ needs.manual-release.outputs.version }}" ]; then
+            VERSION="v${{ needs.manual-release.outputs.version }}"
+          elif [ -n "${{ needs.release.outputs.version }}" ]; then
+            VERSION="v${{ needs.release.outputs.version }}"
+          else
+            echo "No version resolved, skipping downstream jobs."
+            exit 0
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "semver=${VERSION#v}"  >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 3. Build container images (backend + frontend in parallel via matrix).
+  #    Uses always() to break the skipped-ancestor chain from resolve-version,
+  #    then checks outputs explicitly to decide whether to actually run.
+  # ---------------------------------------------------------------------------
+  build-image:
+    name: Build ${{ matrix.component }} Image
+    needs: resolve-version
+    if: >-
+      always() &&
+      needs.resolve-version.result == 'success' &&
+      needs.resolve-version.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [ backend, frontend ]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.OWNER }}/adhdoit-${{ matrix.component }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ needs.resolve-version.outputs.version }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/Dockerfile.${{ matrix.component }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ needs.resolve-version.outputs.version }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/adhdoit-${{ matrix.component }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.OWNER }}/adhdoit-${{ matrix.component }}:buildcache,mode=max
+
+  # ---------------------------------------------------------------------------
+  # 4. Release assets – Go binaries + compose file attached to the GH release.
+  # ---------------------------------------------------------------------------
+  release-assets:
+    name: Release Assets
+    needs: resolve-version
+    if: >-
+      always() &&
+      needs.resolve-version.result == 'success' &&
+      needs.resolve-version.outputs.version != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.version }}
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build backend binaries
+        env:
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          LDFLAGS="-s -w -X main.version=${VERSION} -X main.commit=${{ github.sha }}"
+          mkdir -p dist
+          cd backend
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o ../dist/adhdoit-server-linux-amd64 ./cmd/server
+          GOOS=linux GOARCH=arm64 go build -ldflags="$LDFLAGS" -o ../dist/adhdoit-server-linux-arm64 ./cmd/server
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.resolve-version.outputs.version }}
+        run: |
+          gh release upload "${VERSION}" \
+            dist/adhdoit-server-linux-amd64 \
+            dist/adhdoit-server-linux-arm64 \
+            compose.yml \
+            --clobber
