@@ -9,18 +9,27 @@ export const doneRoute = createRoute({
   component: DonePage,
 })
 
+function SkeletonItem() {
+  return <div className="h-[58px] rounded-2xl bg-white/[0.03] border border-white/[0.05] animate-pulse" />
+}
+
 function DonePage() {
   const { data: todos, isLoading } = useTodos({ view: 'done' })
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
-      <h1 className="mb-6 text-2xl font-bold">Done</h1>
+    <div className="mx-auto max-w-2xl px-6 py-8">
+      <div className="mb-8 animate-fade-up opacity-0" style={{ animationDelay: '0ms' }}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-400/50 mb-1">
+          Completed
+        </p>
+        <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-white/90">
+          Done
+        </h1>
+      </div>
 
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
-          ))}
+        <div className="space-y-1.5">
+          {[1, 2, 3].map((i) => <SkeletonItem key={i} />)}
         </div>
       ) : (
         <TodoList

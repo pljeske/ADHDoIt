@@ -34,6 +34,7 @@ export async function apiFetch<T>(
     const refreshToken = getRefreshToken()
     if (!refreshToken) {
       logout()
+      window.location.replace('/login')
       throw new Error('Unauthorized')
     }
 
@@ -65,6 +66,7 @@ export async function apiFetch<T>(
 
       if (!refreshRes.ok) {
         logout()
+        window.location.replace('/login')
         throw new Error('Session expired')
       }
 

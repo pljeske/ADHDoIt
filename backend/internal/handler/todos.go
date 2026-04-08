@@ -118,6 +118,7 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	params := &db.CreateTodoParams{
 		UserID:   userID,
+		Title:    req.Title,
 		Priority: 0,
 	}
 

@@ -12,6 +12,10 @@ export const categoryRoute = createRoute({
   component: CategoryPage,
 })
 
+function SkeletonItem() {
+  return <div className="h-[58px] rounded-2xl bg-white/[0.03] border border-white/[0.05] animate-pulse" />
+}
+
 function CategoryPage() {
   const { id } = categoryRoute.useParams()
   const [editTodo, setEditTodo] = useState<Todo | null>(null)
@@ -21,22 +25,27 @@ function CategoryPage() {
   const category = categories?.find((c) => c.id === id)
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="mb-6 flex items-center gap-3">
-        {category && (
-          <span
-            className="h-4 w-4 rounded-full"
-            style={{ backgroundColor: category.color }}
-          />
-        )}
-        <h1 className="text-2xl font-bold">{category?.name ?? 'Category'}</h1>
+    <div className="mx-auto max-w-2xl px-6 py-8">
+      <div className="mb-8 animate-fade-up opacity-0" style={{ animationDelay: '0ms' }}>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/25 mb-1">
+          Category
+        </p>
+        <div className="flex items-center gap-3">
+          {category && (
+            <span
+              className="h-3 w-3 rounded-full flex-shrink-0 shadow-[0_0_8px_currentColor]"
+              style={{ backgroundColor: category.color, color: category.color }}
+            />
+          )}
+          <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-white/90">
+            {category?.name ?? 'Category'}
+          </h1>
+        </div>
       </div>
 
       {isLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-14 animate-pulse rounded-lg bg-muted" />
-          ))}
+        <div className="space-y-1.5">
+          {[1, 2, 3].map((i) => <SkeletonItem key={i} />)}
         </div>
       ) : (
         <TodoList
@@ -46,7 +55,11 @@ function CategoryPage() {
         />
       )}
 
-      <TodoFormSheet open={!!editTodo} onOpenChange={(o) => { if (!o) setEditTodo(null) }} todo={editTodo} />
+      <TodoFormSheet
+        open={!!editTodo}
+        onOpenChange={(o) => { if (!o) setEditTodo(null) }}
+        todo={editTodo}
+      />
     </div>
   )
 }

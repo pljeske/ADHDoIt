@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from './ui/sheet'
@@ -11,6 +11,7 @@ import { Select } from './ui/select'
 import { useCategories } from '@/api/categories'
 import { type Todo, type CreateTodoData, type UpdateTodoData, useCreateTodo, useUpdateTodo } from '@/api/todos'
 import { format } from 'date-fns'
+import { cn } from '@/lib/utils'
 
 const schema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -29,16 +30,25 @@ interface Props {
   todo?: Todo | null
 }
 
+const PRIORITY_OPTIONS = [
+  { value: 0, label: 'None', color: 'text-white/30' },
+  { value: 1, label: 'Low', color: 'text-blue-400' },
+  { value: 2, label: 'Medium', color: 'text-amber-400' },
+  { value: 3, label: 'High', color: 'text-red-400' },
+]
+
 export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
   const { data: categories } = useCategories()
   const createTodo = useCreateTodo()
   const updateTodo = useUpdateTodo()
   const isEdit = !!todo
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const {
     register,
     handleSubmit,
     reset,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -61,7 +71,6 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
         category_id: todo.category_id ?? '',
         deadline: todo.deadline ?? format(new Date(), 'yyyy-MM-dd'),
         priority: todo.priority,
-        // datetime-local input needs "YYYY-MM-DDTHH:mm" format (first 16 chars of ISO)
         reminder_at: todo.reminder_at ? todo.reminder_at.slice(0, 16) : '',
       })
     } else {
@@ -77,6 +86,7 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
   }, [open, todo, reset])
 
   async function onSubmit(data: FormData) {
+    setSubmitError(null)
     const payload: CreateTodoData = {
       title: data.title,
       description: data.description || undefined,
@@ -92,8 +102,8 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
         await createTodo.mutateAsync(payload)
       }
       onOpenChange(false)
-    } catch (e) {
-      console.error('Failed to save todo', e)
+    } catch (e: unknown) {
+      setSubmitError(e instanceof Error ? e.message : 'Failed to save todo')
     }
   }
 
@@ -105,24 +115,40 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
           <SheetTitle>{isEdit ? 'Edit Todo' : 'New Todo'}</SheetTitle>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="title">Title *</Label>
-            <Input id="title" autoFocus {...register('title')} placeholder="What needs to be done?" />
-            {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5 flex-1">
+          {/* Title */}
+          <div>
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              autoFocus
+              {...register('title')}
+              placeholder="What needs to be done?"
+            />
+            {errors.title && (
+              <p className="mt-1.5 text-[11px] text-red-400/80">{errors.title.message}</p>
+            )}
           </div>
 
-          <div className="space-y-1">
+          {/* Description */}
+          <div>
             <Label htmlFor="description">Description</Label>
-            <Textarea id="description" {...register('description')} placeholder="Optional details..." rows={3} />
+            <Textarea
+              id="description"
+              {...register('description')}
+              placeholder="Optional details..."
+              rows={3}
+            />
           </div>
 
-          <div className="space-y-1">
+          {/* Deadline */}
+          <div>
             <Label htmlFor="deadline">Deadline</Label>
             <Input id="deadline" type="date" {...register('deadline')} />
           </div>
 
-          <div className="space-y-1">
+          {/* Category */}
+          <div>
             <Label htmlFor="category_id">Category</Label>
             <Select id="category_id" {...register('category_id')}>
               <option value="">None</option>
@@ -134,26 +160,54 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="priority">Priority</Label>
-            <Select id="priority" {...register('priority', { valueAsNumber: true })}>
-              <option value={0}>None</option>
-              <option value={1}>Low</option>
-              <option value={2}>Medium</option>
-              <option value={3}>High</option>
-            </Select>
+          {/* Priority — segmented control */}
+          <div>
+            <Label>Priority</Label>
+            <Controller
+              name="priority"
+              control={control}
+              render={({ field }) => (
+                <div className="flex gap-1.5 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06]">
+                  {PRIORITY_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => field.onChange(opt.value)}
+                      className={cn(
+                        'flex-1 py-1.5 rounded-lg text-[12px] font-medium',
+                        'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                        field.value === opt.value
+                          ? 'bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ' + opt.color
+                          : 'text-white/25 hover:text-white/45',
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            />
           </div>
 
-          <div className="space-y-1">
+          {/* Reminder */}
+          <div>
             <Label htmlFor="reminder_at">Reminder</Label>
             <Input id="reminder_at" type="datetime-local" {...register('reminder_at')} />
           </div>
 
-          <div className="flex gap-2 pt-4">
+          {/* Submit error */}
+          {submitError && (
+            <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-[12.5px] text-red-400">
+              {submitError}
+            </div>
+          )}
+
+          {/* Submit */}
+          <div className="flex gap-2 pt-2">
             <Button type="submit" disabled={isSubmitting} className="flex-1">
-              {isEdit ? 'Save Changes' : 'Create Todo'}
+              {isSubmitting ? 'Saving...' : isEdit ? 'Save Changes' : 'Create Todo'}
             </Button>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
           </div>
