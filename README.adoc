@@ -12,10 +12,10 @@ ADHD-friendly multi-user todo list application. Features smart views, overdue ov
 |Layer |Technology
 
 |Backend
-|Go 1.23 — stateless REST API (chi router, pgx/v5, River job queue)
+|Go 1.26 — stateless REST API (chi router, pgx/v5, River job queue)
 
 |Frontend
-|React 18 + Vite + TypeScript (TanStack Router, TanStack Query, Zustand, shadcn/ui + Tailwind CSS v3)
+|React 18 + Vite + TypeScript (TanStack Router, TanStack Query, Zustand, shadcn/ui + Tailwind CSS v4)
 
 |Database
 |PostgreSQL 16
@@ -269,8 +269,7 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 adhdo-it/
 ├── CLAUDE.md                        Implementation spec
 ├── Caddyfile                        Reverse proxy config
-├── docker-compose.yml
-├── docker-compose.override.yml      Local dev overrides
+├── compose.yml
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile

@@ -1,5 +1,24 @@
 # ADHDoIt — Claude Code Implementation Spec
 
+## Commands
+
+```bash
+# Run full stack (build + start)
+docker compose up -d --build
+
+# View logs
+docker compose logs -f app
+docker compose logs -f frontend
+
+# Frontend dev server (from frontend/)
+npm run dev
+
+# Regenerate sqlc queries (from backend/internal/db/)
+sqlc generate
+```
+
+---
+
 ## Project overview
 
 ADHDoIt is a multi-user todo list application designed with ADHD-friendly UX in mind. It features smart views, overdue overflow (todos past deadline are never lost but don't clutter the main list), date/time reminders via email and Web Push, categories, and flexible sorting. The backend is a stateless Go REST API; the frontend is a React SPA. Both run as containers via Docker/Podman Compose.
@@ -11,8 +30,7 @@ ADHDoIt is a multi-user todo list application designed with ADHD-friendly UX in 
 ```
 adhdo-it/
 ├── CLAUDE.md                  ← this file
-├── docker-compose.yml
-├── docker-compose.override.yml  ← local dev overrides
+├── compose.yml
 ├── Caddyfile
 ├── .env.example
 ├── backend/
@@ -44,7 +62,7 @@ adhdo-it/
     ├── components.json        ← shadcn/ui config
     └── src/
         ├── main.tsx
-        ├── routeTree.gen.ts   ← TanStack Router generated
+        ├── router.ts          ← TanStack Router manual setup
         ├── routes/
         │   ├── __root.tsx
         │   ├── index.tsx      ← redirects to /today
@@ -60,10 +78,8 @@ adhdo-it/
         ├── components/
         │   ├── TodoItem.tsx
         │   ├── TodoList.tsx
-        │   ├── AddTodoSheet.tsx
-        │   ├── EditTodoSheet.tsx
+        │   ├── TodoFormSheet.tsx  ← unified add/edit sheet
         │   ├── CategoryBadge.tsx
-        │   ├── SortControls.tsx
         │   └── AppShell.tsx
         ├── api/               ← TanStack Query hooks + fetch wrappers
         │   ├── client.ts
@@ -103,9 +119,9 @@ adhdo-it/
 | Concern | Package |
 |---|---|
 | Framework | React 18 + Vite + TypeScript |
-| UI primitives | shadcn/ui (Radix UI + Tailwind CSS v3) |
+| UI primitives | shadcn/ui (Radix UI + Tailwind CSS v4) |
 | Data fetching | `@tanstack/react-query` v5 |
-| Routing | `@tanstack/react-router` (file-based) |
+| Routing | `@tanstack/react-router` (manual `createRoute`, not file-based codegen) |
 | Forms | `react-hook-form` + `zod` |
 | Dates | `date-fns` |
 | State | `zustand` (auth token only; server state in TanStack Query) |
@@ -144,7 +160,7 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@example.com
 
 # Frontend (build-time, injected by Vite)
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=/api/v1
 VITE_VAPID_PUBLIC_KEY=   # same as VAPID_PUBLIC_KEY
 ```
 
@@ -264,7 +280,7 @@ For `ListTodos`, use a parameterized query with filters. Example approach — us
 SELECT * FROM todos
 WHERE user_id = $1
   AND status = 'active'
-  AND deadline <= CURRENT_DATE AT TIME ZONE $2
+  AND deadline = (CURRENT_DATE AT TIME ZONE $2)::date
 ORDER BY priority DESC, deadline ASC, created_at ASC;
 
 -- name: ListTodosUpcoming :many
@@ -485,7 +501,7 @@ Decode request → validate with `validator` → call sqlc query → return JSON
 ### JWT implementation
 
 - Access token: short-lived (15m), contains `user_id` and `email` in claims. Signed with HS256.
-- Refresh token: random 32-byte value, stored as bcrypt hash in `refresh_tokens` table, returned as hex string to client.
+- Refresh token: random 32-byte value, stored as SHA-256 hash in `refresh_tokens` table, returned as hex string to client.
 - Auth middleware: extract Bearer token → parse JWT → inject user ID into context via typed key.
 - On refresh: verify token against DB hash, delete old token, issue new pair (rotation).
 
@@ -624,7 +640,7 @@ self.addEventListener('notificationclick', event => {
 
 ## Docker setup
 
-### `docker-compose.yml`
+### `compose.yml`
 
 ```yaml
 services:
@@ -691,29 +707,6 @@ volumes:
   caddy_config:
 ```
 
-### `docker-compose.override.yml` (local dev — not committed)
-
-```yaml
-services:
-  db:
-    ports:
-      - "5432:5432"
-  app:
-    build:
-      target: builder       # stay in build stage with Go toolchain for faster rebuilds
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./backend:/app      # mount source for air live reload
-    command: ["air"]
-    environment:
-      ENVIRONMENT: development
-  frontend:
-    ports:
-      - "5173:5173"
-    command: ["npm", "run", "dev", "--", "--host"]
-```
-
 ### `Caddyfile`
 
 ```caddy
@@ -778,8 +771,8 @@ COPY --from=builder /app/public/sw.js /srv/sw.js
 
 Implement in this sequence to always have a runnable state:
 
-1. **Scaffold** — repo layout, `go mod init`, `npm create vite`, docker-compose skeletons, `.env.example`
-2. **Database** — migration files, run docker-compose db, verify schema, run `sqlc generate`
+1. **Scaffold** — repo layout, `go mod init`, `npm create vite`, compose skeletons, `.env.example`
+2. **Database** — migration files, run `docker compose up -d db`, verify schema, run `sqlc generate`
 3. **Auth backend** — register, login, refresh, logout handlers; JWT utils; auth middleware
 4. **Auth frontend** — login + register pages, token storage, api client with auto-refresh
 5. **Categories backend** — full CRUD
@@ -807,6 +800,40 @@ Implement in this sequence to always have a runnable state:
 - Frontend: use `cn()` from shadcn for all conditional classNames. No inline style except where Tailwind is insufficient.
 - Keep the River worker and the HTTP server in the same binary but separate goroutines. Add a build tag or env flag if they need to be split later.
 - Generate VAPID keys once and store securely: `npx web-push generate-vapid-keys`
+
+---
+
+## Bugs & gotchas discovered during development
+
+### Go handler: always assign all request fields to params
+When adding a new handler, validate that every field from the request struct is
+assigned to the DB params struct. Missing `params.Title = req.Title` caused todos
+to silently be created with empty titles despite passing validation.
+
+### Auth: single refresh, gate UI behind isAuthReady
+`__root.tsx` and `apiFetch`'s 401 handler both call the refresh endpoint with the
+same token. Token rotation means one call invalidates the other → logout loop.
+Fix: `isAuthReady` bool in auth store; `__root.tsx` renders a blank screen until
+the one initial refresh resolves, preventing TanStack Query from firing early.
+See `src/store/auth.ts` (isAuthReady) and `src/routes/__root.tsx`.
+
+### react-hook-form: custom controls must use Controller
+Fields set only via `setValue()` without a `register()`-attached DOM element come
+through as `undefined` in `handleSubmit` data → zod validation fails silently,
+`onSubmit` is never called, no error shown to user. Always use `Controller` for
+non-native inputs (segmented controls, custom pickers, etc.).
+
+### Tailwind v4 migration
+- PostCSS plugin moved: install `@tailwindcss/postcss`, use it instead of `tailwindcss` in postcss.config
+- Replace `@tailwind base/components/utilities` with `@import "tailwindcss"`
+- Use `@config "../tailwind.config.ts"` in CSS to keep v3-style config
+- `autoprefixer` no longer needed in PostCSS chain (v4 built-in)
+
+### Docker CI Dockerfiles
+Dockerfiles live at `backend/Dockerfile` and `frontend/Dockerfile`.
+Build context for each is their own subdirectory (`./backend`, `./frontend`).
+The CI workflow uses `context: ./${{ matrix.component }}` and
+`file: ./${{ matrix.component }}/Dockerfile`.
 
 ---
 
