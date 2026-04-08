@@ -39,22 +39,19 @@ func toTodoResponse(t *db.Todo) TodoResponse {
 	}
 
 	if t.CategoryID.Valid {
-		id := uuid.UUID(t.CategoryID.Bytes)
-		r.CategoryID = &id
+		r.CategoryID = new(uuid.UUID(t.CategoryID.Bytes))
 	}
 	if t.Description.Valid {
 		r.Description = &t.Description.String
 	}
 	if t.Deadline.Valid {
-		s := t.Deadline.Time.Format("2006-01-02")
-		r.Deadline = &s
+		r.Deadline = new(t.Deadline.Time.Format("2006-01-02"))
 	}
 	if t.ReminderAt.Valid {
 		r.ReminderAt = &t.ReminderAt.Time
 	}
 	if t.SnoozeUntil.Valid {
-		s := t.SnoozeUntil.Time.Format("2006-01-02")
-		r.SnoozeUntil = &s
+		r.SnoozeUntil = new(t.SnoozeUntil.Time.Format("2006-01-02"))
 	}
 	if t.DoneAt.Valid {
 		r.DoneAt = &t.DoneAt.Time
