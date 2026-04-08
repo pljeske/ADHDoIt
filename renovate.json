@@ -1,0 +1,78 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Berlin",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 0,
+  "labels": ["dependencies"],
+  "separateMajorMinor": true,
+  "packageRules": [
+    {
+      "description": "Automerge non-major Go and npm updates",
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "matchCurrentVersion": "!/^0/",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Group all Go dependency updates",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Go dependencies"
+    },
+    {
+      "description": "Group TanStack updates",
+      "matchPackagePrefixes": ["@tanstack/"],
+      "groupName": "TanStack"
+    },
+    {
+      "description": "Group React core",
+      "matchPackageNames": ["react", "react-dom", "@types/react", "@types/react-dom"],
+      "groupName": "React"
+    },
+    {
+      "description": "Group Tailwind CSS toolchain",
+      "matchPackageNames": ["tailwindcss", "autoprefixer", "postcss", "tailwind-merge"],
+      "groupName": "Tailwind CSS"
+    },
+    {
+      "description": "Group Vite and build tooling",
+      "matchPackageNames": ["vite", "@vitejs/plugin-react", "typescript"],
+      "groupName": "Build tooling"
+    },
+    {
+      "description": "Group GitHub Actions — minor and patch only",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "description": "Group Docker base images",
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "Docker base images"
+    },
+    {
+      "description": "Require manual review for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major-update"]
+    }
+  ],
+  "gomod": {
+    "enabled": true
+  },
+  "npm": {
+    "enabled": true
+  },
+  "dockerfile": {
+    "enabled": true
+  },
+  "github-actions": {
+    "enabled": true
+  }
+}
