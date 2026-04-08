@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS push_subscriptions;
+DROP TABLE IF EXISTS todos;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;
+DROP TYPE IF EXISTS todo_status;
+DROP EXTENSION IF EXISTS "pgcrypto";

@@ -1,0 +1,323 @@
+= ADHDoIt
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+
+ADHD-friendly multi-user todo list application. Features smart views, overdue overflow (past-deadline todos are never lost but don't clutter today's list), date/time reminders via email and Web Push, categories, and flexible sorting.
+
+== Architecture
+
+[cols="1,2"]
+|===
+|Layer |Technology
+
+|Backend
+|Go 1.23 — stateless REST API (chi router, pgx/v5, River job queue)
+
+|Frontend
+|React 18 + Vite + TypeScript (TanStack Router, TanStack Query, Zustand, shadcn/ui + Tailwind CSS v3)
+
+|Database
+|PostgreSQL 16
+
+|Reverse Proxy
+|Caddy 2 (automatic TLS in production, SPA fallback, API proxy)
+
+|Job Queue
+|River (PostgreSQL-backed, no Redis required)
+|===
+
+== Getting Started
+
+=== Prerequisites
+
+* Docker and Docker Compose (or Podman Compose)
+* Go 1.23+ (for local backend development)
+* Node.js 22+ (for local frontend development)
+
+=== Quick Start with Docker
+
+[source,bash]
+----
+# 1. Copy and edit the environment file
+cp .env.example .env
+
+# 2. Set required secrets in .env:
+#   - DB_PASSWORD
+#   - JWT_SECRET (min 32 characters)
+#   - SMTP_* (optional, for email reminders)
+#   - VAPID_* (optional, for Web Push notifications)
+
+# 3. Start everything
+docker compose up
+----
+
+The app will be available at http://localhost (port 80) or https://localhost (port 443).
+
+=== Local Development (without Docker)
+
+==== Start the database
+
+[source,bash]
+----
+docker compose up db
+----
+
+==== Backend
+
+[source,bash]
+----
+cd backend
+cp ../.env.example .env   # edit DATABASE_URL to point to localhost:5432
+go run ./cmd/server
+----
+
+The API listens on http://localhost:8080.
+
+==== Frontend
+
+[source,bash]
+----
+cd frontend
+npm install
+npm run dev
+----
+
+The dev server starts at http://localhost:5173 and proxies `/api` requests to the backend.
+
+== Environment Variables
+
+All variables are defined in `.env.example`. Copy it to `.env` and fill in the required values before running.
+
+[cols="2,1,3"]
+|===
+|Variable |Required |Description
+
+|`DATABASE_URL`
+|Yes
+|PostgreSQL connection string
+
+|`DB_PASSWORD`
+|Yes
+|Password for the `adhdo` Postgres user (used by Docker Compose)
+
+|`JWT_SECRET`
+|Yes
+|HMAC secret for signing access tokens — minimum 32 characters
+
+|`JWT_ACCESS_TTL`
+|No (default: `15m`)
+|Lifetime of access tokens
+
+|`JWT_REFRESH_TTL`
+|No (default: `720h`)
+|Lifetime of refresh tokens
+
+|`PORT`
+|No (default: `8080`)
+|HTTP port the backend listens on
+
+|`ENVIRONMENT`
+|No (default: `production`)
+|Set to `development` to load `.env` automatically and use text log format
+
+|`DOMAIN`
+|No (default: `localhost`)
+|Hostname for Caddy — set to your real domain for automatic Let's Encrypt TLS
+
+|`SMTP_HOST`
+|No
+|SMTP server hostname for email reminders
+
+|`SMTP_PORT`
+|No (default: `587`)
+|SMTP server port
+
+|`SMTP_USER`
+|No
+|SMTP username / sender address
+
+|`SMTP_PASSWORD`
+|No
+|SMTP password
+
+|`SMTP_FROM`
+|No
+|From header, e.g. `ADHDoIt <noreply@example.com>`
+
+|`VAPID_PUBLIC_KEY`
+|No
+|VAPID public key for Web Push
+
+|`VAPID_PRIVATE_KEY`
+|No
+|VAPID private key for Web Push
+
+|`VAPID_SUBJECT`
+|No
+|VAPID subject, e.g. `mailto:admin@example.com`
+
+|`VITE_API_BASE_URL`
+|No (default: `/api/v1`)
+|API base URL injected at frontend build time
+
+|`VITE_VAPID_PUBLIC_KEY`
+|No
+|VAPID public key injected at frontend build time (same as `VAPID_PUBLIC_KEY`)
+|===
+
+=== Generating VAPID Keys
+
+[source,bash]
+----
+npx web-push generate-vapid-keys
+----
+
+== API Reference
+
+Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer <access_token>`.
+
+=== Auth
+
+[cols="1,3,3"]
+|===
+|Method + Path |Request body |Response
+
+|`POST /auth/register`
+|`{ email, name, password, timezone }`
+|`201` — `{ user, access_token, refresh_token }`
+
+|`POST /auth/login`
+|`{ email, password }`
+|`200` — `{ user, access_token, refresh_token }`
+
+|`POST /auth/refresh`
+|`{ refresh_token }`
+|`200` — `{ access_token, refresh_token }`
+
+|`DELETE /auth/logout`
+|`{ refresh_token }` _(authenticated)_
+|`204`
+|===
+
+=== Todos
+
+[cols="1,3"]
+|===
+|Method + Path |Notes
+
+|`GET /todos`
+|Query params: `view=today\|upcoming\|overdue\|done\|category`, `category_id=<uuid>`
+
+|`POST /todos`
+|Fields: `title` (required), `description`, `category_id`, `deadline` (YYYY-MM-DD), `priority` (0–3), `reminder_at` (RFC3339)
+
+|`GET /todos/:id`
+|
+
+|`PATCH /todos/:id`
+|Partial update of any create field
+
+|`DELETE /todos/:id`
+|Hard delete — `204`
+
+|`POST /todos/:id/snooze`
+|Body: `{ snooze_until: "YYYY-MM-DD" }`
+
+|`POST /todos/:id/done`
+|Sets `status=done`, records `done_at`
+
+|`POST /todos/:id/reopen`
+|Clears `done_at` and `snooze_until`, sets `status=active`
+|===
+
+=== Categories
+
+[cols="1,3"]
+|===
+|Method + Path |Notes
+
+|`GET /categories`
+|
+
+|`POST /categories`
+|`{ name, color }` — color is a hex string, e.g. `#6366f1`
+
+|`PATCH /categories/:id`
+|`{ name, color }`
+
+|`DELETE /categories/:id`
+|Todos in this category get `category_id = NULL` — `204`
+|===
+
+=== Push Subscriptions
+
+[cols="1,3"]
+|===
+|Method + Path |Notes
+
+|`POST /push/subscribe`
+|`{ endpoint, keys: { p256dh, auth } }` — upserts on endpoint
+
+|`DELETE /push/subscribe`
+|`{ endpoint }`
+|===
+
+== Project Structure
+
+----
+adhdo-it/
+├── CLAUDE.md                        Implementation spec
+├── Caddyfile                        Reverse proxy config
+├── docker-compose.yml
+├── docker-compose.override.yml      Local dev overrides
+├── .env.example
+├── backend/
+│   ├── Dockerfile
+│   ├── go.mod / go.sum
+│   ├── cmd/server/main.go           Entry point
+│   └── internal/
+│       ├── config/                  Env var loading
+│       ├── db/
+│       │   ├── migrations/          SQL migration files
+│       │   ├── queries/             SQL query files (sqlc source)
+│       │   ├── models.go            Domain structs
+│       │   ├── *.sql.go             Hand-written query implementations
+│       │   └── sqlc.yaml
+│       ├── handler/                 HTTP handlers (auth, todos, categories, push)
+│       ├── middleware/              JWT auth, request logging
+│       ├── model/                   Shared domain types (context keys)
+│       ├── notification/            SMTP email + Web Push dispatch
+│       ├── server/                  Router setup, River worker initialization
+│       └── worker/                  River job definitions
+└── frontend/
+    ├── Dockerfile
+    ├── public/sw.js                 Service worker for Web Push
+    └── src/
+        ├── api/                     TanStack Query hooks + fetch wrappers
+        ├── components/              React components (AppShell, TodoItem, sheets, UI)
+        ├── lib/                     Utilities, service worker registration
+        ├── routes/                  TanStack Router route definitions
+        ├── store/                   Zustand auth store
+        └── router.ts                Manual route tree
+----
+
+== Key Design Decisions
+
+* *Stateless backend* — no session storage; JWTs for access, rotating opaque refresh tokens stored as SHA-256 hashes in Postgres.
+* *Overdue is derived, never stored* — `deadline < today AND status = active`. The `today` view fetches both today's todos and overdue todos; overdue items appear in a collapsible section.
+* *`status` changes only through action endpoints* — `PATCH /todos/:id` cannot set `status` directly; use `/snooze`, `/done`, `/reopen` to maintain invariants.
+* *Deadlines are dates, not timestamps* — avoids timezone confusion. "Today" is resolved server-side using the user's stored timezone.
+* *River on Postgres* — job queue shares the application database; no Redis or separate queue infrastructure needed.
+* *Hard deletes only* — the `done` status acts as the archive; no soft-delete complexity.
+
+== Production Deployment
+
+Set `DOMAIN` to your hostname and Caddy will automatically obtain and renew a Let's Encrypt certificate. Expose ports 80, 443, and 443/UDP (HTTP/3).
+
+[source,bash]
+----
+DOMAIN=todo.example.com docker compose up -d
+----
+
+Ensure `ENVIRONMENT=production` so the Go server uses JSON structured logging and does not attempt to load a local `.env` file.
