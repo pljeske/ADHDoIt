@@ -1,10 +1,10 @@
+import { apiFetch } from '@/api/client'
+
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
 
 export async function registerPushSubscription() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
   if (!VAPID_PUBLIC_KEY) return
-  // Skip on localhost — service worker needs a valid HTTPS cert
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return
 
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return
@@ -15,10 +15,8 @@ export async function registerPushSubscription() {
     applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
   })
 
-  await fetch('/api/v1/push/subscribe', {
+  await apiFetch('/push/subscribe', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
     body: JSON.stringify({
       endpoint: sub.endpoint,
       keys: {

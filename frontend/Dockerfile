@@ -21,5 +21,7 @@ LABEL org.opencontainers.image.title="ADHDoIt Frontend" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="MIT"
+
+COPY ./Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /app/dist /srv
 COPY --from=builder /app/public/sw.js /srv/sw.js

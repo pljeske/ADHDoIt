@@ -1,9 +1,9 @@
 self.addEventListener('push', event => {
-  const data = event.data?.json() ?? {}
+  let data = {}
+  try { data = event.data?.json() ?? {} } catch (_) {}
   event.waitUntil(
     self.registration.showNotification(data.title ?? 'ADHDoIt', {
       body: data.body,
-      icon: '/icon-192.png',
       data: { url: data.url ?? '/' }
     })
   )

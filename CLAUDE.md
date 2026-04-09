@@ -817,6 +817,21 @@ Fix: `isAuthReady` bool in auth store; `__root.tsx` renders a blank screen until
 the one initial refresh resolves, preventing TanStack Query from firing early.
 See `src/store/auth.ts` (isAuthReady) and `src/routes/__root.tsx`.
 
+### Web Push gotchas
+- `registerPushSubscription` in `sw.ts` must use `apiFetch`, not raw `fetch` —
+  the app stores JWTs in memory (not cookies), so raw fetch sends no auth header
+  and the `/push/subscribe` POST silently 401s.
+- In `sw.js`, wrap `event.data?.json()` in try-catch — DevTools "Push" and some
+  push services send plain text, causing an unhandled parse error that swallows
+  the notification silently.
+
+### datetime-local inputs: always convert UTC → local before display
+API timestamps are UTC strings (e.g. "2026-04-09T08:16:00Z"). Feeding them
+directly to a `datetime-local` input (via `.slice(0, 16)`) shows UTC time, not
+the user's local time. Always use date-fns `format`:
+  `format(new Date(utcString), "yyyy-MM-dd'T'HH:mm")`
+Submission is fine: `new Date("2026-04-09T10:16")` parses as local, `.toISOString()` gives correct UTC.
+
 ### react-hook-form: custom controls must use Controller
 Fields set only via `setValue()` without a `register()`-attached DOM element come
 through as `undefined` in `handleSubmit` data → zod validation fails silently,

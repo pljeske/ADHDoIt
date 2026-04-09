@@ -49,5 +49,8 @@ func SendWebPush(cfg *config.Config, sub *db.PushSubscription, todoTitle string)
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("push service returned %d for endpoint %s", resp.StatusCode, sub.Endpoint)
+	}
 	return nil
 }

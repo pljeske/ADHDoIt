@@ -25,14 +25,7 @@ declare module '@tanstack/react-router' {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    // Service workers require HTTPS with a valid (non-self-signed) cert.
-    // Skip registration in local dev to avoid console noise.
-    const isLocalhost = ['localhost', '127.0.0.1'].includes(location.hostname)
-    if (!isLocalhost || location.protocol === 'http:') {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        // Silently ignore — push notifications just won't work without SW
-      })
-    }
+    navigator.serviceWorker.register('/sw.js').catch(console.warn)
   })
 }
 

@@ -49,6 +49,9 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
     handleSubmit,
     reset,
     control,
+    watch,
+    getValues,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -71,7 +74,7 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
         category_id: todo.category_id ?? '',
         deadline: todo.deadline ?? format(new Date(), 'yyyy-MM-dd'),
         priority: todo.priority,
-        reminder_at: todo.reminder_at ? todo.reminder_at.slice(0, 16) : '',
+        reminder_at: todo.reminder_at ? format(new Date(todo.reminder_at), "yyyy-MM-dd'T'HH:mm") : '',
       })
     } else {
       reset({
@@ -84,6 +87,16 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
       })
     }
   }, [open, todo, reset])
+
+  // For new todos: default reminder to deadline at 10:00; keep user's chosen
+  // time when deadline changes.
+  const deadline = watch('deadline')
+  useEffect(() => {
+    if (!open || isEdit || !deadline) return
+    const current = getValues('reminder_at')
+    const timePart = current?.slice(11, 16) || '10:00'
+    setValue('reminder_at', `${deadline}T${timePart}`)
+  }, [deadline, open, isEdit]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function onSubmit(data: FormData) {
     setSubmitError(null)
