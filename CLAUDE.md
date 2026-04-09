@@ -1,5 +1,7 @@
 # ADHDoIt — Claude Code Implementation Spec
 
+At the start of each session, read the file at .mex/AGENTS.md before doing anything else.
+
 ## Commands
 
 ```bash
@@ -296,7 +298,7 @@ ORDER BY deadline ASC, priority DESC, created_at ASC;
 -- name: ListTodosOverdue :many
 SELECT * FROM todos
 WHERE user_id = $1
-  AND status IN ('active', 'snoozed')
+  AND status = 'active'
   AND deadline < CURRENT_DATE AT TIME ZONE $2
 ORDER BY deadline ASC, priority DESC, created_at ASC;
 
@@ -401,13 +403,13 @@ POST   /api/v1/todos/:id/reopen
 ```json
 // Request
 { "snooze_until": "2025-04-15" }
-// Sets status = 'snoozed', snooze_until = provided date
+// Reschedules deadline to the provided date; status remains 'active'
 // Response 200 — updated todo
 ```
 
 **`POST /todos/:id/done`** — sets `status = done`, `done_at = NOW()`. Returns 200.
 
-**`POST /todos/:id/reopen`** — sets `status = active`, clears `done_at`, `snooze_until`. Returns 200.
+**`POST /todos/:id/reopen`** — sets `status = active`, clears `done_at`. Returns 200.
 
 **`DELETE /todos/:id`** — hard delete. Returns 204.
 
@@ -583,13 +585,13 @@ Each route maps to a view query param:
 Fetch both `today` and `overdue` lists. Display:
 1. Today's todos sorted by priority then deadline
 2. Collapsible section at bottom: "X overdue" — expand to show overdue list inline
-3. Each overdue item shows a "Snooze" action (date picker popover) and "Done" button
+3. Each overdue item shows a "Reschedule" action (date picker popover) and "Done" button
 
 ### TodoItem component
 
 Display: checkbox (done), title, category badge (colored dot + name), deadline date, priority indicator (colored left border: gray/blue/amber/red), reminder bell icon if `reminder_at` is set.
 
-Actions accessible on hover/focus: edit (open sheet), snooze, delete.
+Actions accessible on hover/focus: edit (open sheet), reschedule, delete.
 
 Overline strikethrough on done items.
 
@@ -687,7 +689,8 @@ Implement in this sequence to always have a runnable state:
 - Every DB query is user-scoped — always filter by `user_id` from JWT context. Never trust a user-supplied user_id.
 - UUID primary keys everywhere. Generate with `uuid.New()` in Go or `gen_random_uuid()` in SQL.
 - Timezone handling: `deadline` is a `DATE` (not timestamptz) to avoid TZ confusion. The API derives "today" from the user's `timezone` field when filtering. Store `reminder_at` as `TIMESTAMPTZ`.
-- `status` is never directly settable via `PATCH /todos/:id` — use the dedicated action endpoints (snooze, done, reopen) to ensure invariants (e.g. snooze_until always set when snoozed).
+- `status` is never directly settable via `PATCH /todos/:id` — use the dedicated action endpoints (snooze, done, reopen) to ensure invariants.
+- Snooze reschedules the deadline — it does **not** change `status`. The todo stays `active` and simply reappears in the appropriate view (Today or Upcoming) on the new date.
 - Overdue is derived, never stored — `deadline < (CURRENT_DATE AT TIME ZONE user.timezone)::date AND status = 'active'`.
 - Soft-delete is not used. Hard delete only. The "done" status is the archive.
 - CORS: allow the frontend origin in development (`localhost:5173`). In production, Caddy handles routing and the API should only allow the same origin.
