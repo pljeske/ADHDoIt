@@ -16,7 +16,8 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
+  backend:
+    image: ghcr.io/pljeske/adhdoit-backend:latest
     build:
       context: ./backend
     restart: unless-stopped
@@ -40,6 +41,7 @@ services:
         condition: service_healthy
 
   frontend:
+    image: ghcr.io/pljeske/adhdoit-frontend:latest
     build:
       context: ./frontend
       args:
@@ -53,7 +55,9 @@ services:
       - caddy_config:/config
     environment:
       DOMAIN: ${DOMAIN:-localhost}
-    depends_on: [app]
+      BACKEND_URL: $BACKEND_URL
+      BACKEND_PORT: $BACKEND_PORT
+    depends_on: [backend]
 
 volumes:
   pgdata:
