@@ -24,6 +24,12 @@ import (
 	rivermigrate "github.com/riverqueue/river/rivermigrate"
 )
 
+// Injected at build time via -ldflags.
+var (
+	version = "dev"
+	commit  = "unknown"
+)
+
 func main() {
 	cfg := config.Load()
 	if cfg.Environment != "production" {
@@ -80,7 +86,7 @@ func main() {
 	httpServer := server.New(cfg, pool, queries, riverClient)
 
 	go func() {
-		slog.Info("server listening", "addr", httpServer.Addr)
+		slog.Info("server listening", "addr", httpServer.Addr, "version", version, "commit", commit)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server error", "err", err)
 		}

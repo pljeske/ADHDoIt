@@ -823,6 +823,11 @@ through as `undefined` in `handleSubmit` data → zod validation fails silently,
 `onSubmit` is never called, no error shown to user. Always use `Controller` for
 non-native inputs (segmented controls, custom pickers, etc.).
 
+### TypeScript path aliases: paths without baseUrl
+With `moduleResolution: "bundler"`, use `paths` alone — `baseUrl` is deprecated
+(TS 6.0+) and causes build errors. `tsc` resolves `@/*` via `paths`; Vite resolves
+it via `resolve.alias` in `vite.config.ts`. Both must be configured.
+
 ### Tailwind v4 migration
 - PostCSS plugin moved: install `@tailwindcss/postcss`, use it instead of `tailwindcss` in postcss.config
 - Replace `@tailwind base/components/utilities` with `@import "tailwindcss"`
