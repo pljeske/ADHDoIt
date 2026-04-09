@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 
-	"adhdo-it/internal/db"
-	mw "adhdo-it/internal/middleware"
+	"adhdoit/internal/db"
+	mw "adhdoit/internal/middleware"
 
 	"github.com/go-playground/validator/v10"
 )

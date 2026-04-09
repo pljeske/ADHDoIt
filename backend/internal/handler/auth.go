@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
-	mw "adhdo-it/internal/middleware"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
+	mw "adhdoit/internal/middleware"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"

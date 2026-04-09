@@ -6,8 +6,8 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
 )
 
 type PushPayload struct {

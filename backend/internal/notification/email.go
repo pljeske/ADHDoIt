@@ -5,7 +5,7 @@ import (
 	"net/smtp"
 	"strings"
 
-	"adhdo-it/internal/config"
+	"adhdoit/internal/config"
 )
 
 func SendReminderEmail(cfg *config.Config, toEmail, toName, todoTitle string) error {

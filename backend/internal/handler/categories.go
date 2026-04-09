@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"adhdo-it/internal/db"
-	mw "adhdo-it/internal/middleware"
+	"adhdoit/internal/db"
+	mw "adhdoit/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

@@ -5,9 +5,9 @@ import (
 	"errors"
 	"log/slog"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
-	"adhdo-it/internal/notification"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
+	"adhdoit/internal/notification"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"

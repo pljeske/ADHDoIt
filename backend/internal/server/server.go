@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"net/http"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
-	"adhdo-it/internal/handler"
-	mw "adhdo-it/internal/middleware"
-	"adhdo-it/internal/worker"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
+	"adhdoit/internal/handler"
+	mw "adhdoit/internal/middleware"
+	"adhdoit/internal/worker"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"

@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
-	mw "adhdo-it/internal/middleware"
-	"adhdo-it/internal/worker"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
+	mw "adhdoit/internal/middleware"
+	"adhdoit/internal/worker"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"

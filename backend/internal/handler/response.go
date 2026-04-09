@@ -3,7 +3,7 @@ package handler
 import (
 	"time"
 
-	"adhdo-it/internal/db"
+	"adhdoit/internal/db"
 
 	"github.com/google/uuid"
 )

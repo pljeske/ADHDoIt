@@ -1,4 +1,4 @@
-module adhdo-it
+module adhdoit
 
 go 1.26
 

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"adhdo-it/internal/model"
+	"adhdoit/internal/model"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"

@@ -10,9 +10,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"adhdo-it/internal/config"
-	"adhdo-it/internal/db"
-	"adhdo-it/internal/server"
+	"adhdoit/internal/config"
+	"adhdoit/internal/db"
+	"adhdoit/internal/server"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepg "github.com/golang-migrate/migrate/v4/database/postgres"
