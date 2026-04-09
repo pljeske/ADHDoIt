@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -34,21 +35,25 @@ func NewTodoHandler(q *db.Queries, pool *pgxpool.Pool, riverClient *river.Client
 }
 
 type createTodoRequest struct {
-	Title       string  `json:"title" validate:"required,min=1"`
-	Description *string `json:"description"`
-	CategoryID  *string `json:"category_id"`
-	Deadline    *string `json:"deadline"` // YYYY-MM-DD
-	Priority    *int16  `json:"priority"`
-	ReminderAt  *string `json:"reminder_at"` // RFC3339
+	Title           string        `json:"title" validate:"required,min=1"`
+	Description     *string       `json:"description"`
+	CategoryID      *string       `json:"category_id"`
+	Deadline        *string       `json:"deadline"` // YYYY-MM-DD
+	Priority        *int16        `json:"priority"`
+	ReminderAt      *string       `json:"reminder_at"` // RFC3339
+	DurationMinutes *int32        `json:"duration_minutes"`
+	Subtasks        []SubtaskItem `json:"subtasks"`
 }
 
 type updateTodoRequest struct {
-	Title       *string `json:"title"`
-	Description *string `json:"description"`
-	CategoryID  *string `json:"category_id"`
-	Deadline    *string `json:"deadline"`
-	Priority    *int16  `json:"priority"`
-	ReminderAt  *string `json:"reminder_at"`
+	Title           *string        `json:"title"`
+	Description     *string        `json:"description"`
+	CategoryID      *string        `json:"category_id"`
+	Deadline        *string        `json:"deadline"`
+	Priority        *int16         `json:"priority"`
+	ReminderAt      *string        `json:"reminder_at"`
+	DurationMinutes *int32         `json:"duration_minutes"`
+	Subtasks        *[]SubtaskItem `json:"subtasks"`
 }
 
 func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +158,14 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 			params.ReminderAt = pgtype.Timestamptz{Time: t, Valid: true}
 		}
 	}
+	if req.DurationMinutes != nil && *req.DurationMinutes > 0 {
+		params.DurationMinutes = pgtype.Int4{Int32: *req.DurationMinutes, Valid: true}
+	}
+	if req.Subtasks != nil {
+		if data, err := json.Marshal(req.Subtasks); err == nil {
+			params.Subtasks = data
+		}
+	}
 
 	todo, err := h.q.CreateTodo(r.Context(), params)
 	if err != nil {
@@ -213,15 +226,17 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := &db.UpdateTodoParams{
-		ID:            existing.ID,
-		UserID:        existing.UserID,
-		CategoryID:    existing.CategoryID,
-		Title:         existing.Title,
-		Description:   existing.Description,
-		Deadline:      existing.Deadline,
-		ReminderAt:    existing.ReminderAt,
-		ReminderJobID: existing.ReminderJobID,
-		Priority:      existing.Priority,
+		ID:              existing.ID,
+		UserID:          existing.UserID,
+		CategoryID:      existing.CategoryID,
+		Title:           existing.Title,
+		Description:     existing.Description,
+		Deadline:        existing.Deadline,
+		ReminderAt:      existing.ReminderAt,
+		ReminderJobID:   existing.ReminderJobID,
+		Priority:        existing.Priority,
+		DurationMinutes: existing.DurationMinutes,
+		Subtasks:        existing.Subtasks,
 	}
 
 	if req.Title != nil {
@@ -247,6 +262,19 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 		t, err := time.Parse("2006-01-02", *req.Deadline)
 		if err == nil {
 			params.Deadline = pgtype.Date{Time: t, Valid: true}
+		}
+	}
+
+	if req.DurationMinutes != nil {
+		if *req.DurationMinutes > 0 {
+			params.DurationMinutes = pgtype.Int4{Int32: *req.DurationMinutes, Valid: true}
+		} else {
+			params.DurationMinutes = pgtype.Int4{}
+		}
+	}
+	if req.Subtasks != nil {
+		if data, err := json.Marshal(*req.Subtasks); err == nil {
+			params.Subtasks = data
 		}
 	}
 
@@ -410,15 +438,17 @@ func (h *TodoHandler) scheduleReminder(ctx context.Context, todo *db.Todo) {
 
 	// Update job ID on the todo
 	updateParams := &db.UpdateTodoParams{
-		ID:            todo.ID,
-		UserID:        todo.UserID,
-		CategoryID:    todo.CategoryID,
-		Title:         todo.Title,
-		Description:   todo.Description,
-		Deadline:      todo.Deadline,
-		ReminderAt:    todo.ReminderAt,
-		ReminderJobID: pgtype.Int8{Int64: res.Job.ID, Valid: true},
-		Priority:      todo.Priority,
+		ID:              todo.ID,
+		UserID:          todo.UserID,
+		CategoryID:      todo.CategoryID,
+		Title:           todo.Title,
+		Description:     todo.Description,
+		Deadline:        todo.Deadline,
+		ReminderAt:      todo.ReminderAt,
+		ReminderJobID:   pgtype.Int8{Int64: res.Job.ID, Valid: true},
+		Priority:        todo.Priority,
+		DurationMinutes: todo.DurationMinutes,
+		Subtasks:        todo.Subtasks,
 	}
 	if _, err := h.q.UpdateTodo(ctx, updateParams); err != nil {
 		slog.Warn("failed to store reminder job id", "err", err)

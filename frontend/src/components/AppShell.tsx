@@ -8,15 +8,18 @@ import {
   LogOut,
   Plus,
   Sparkles,
+  Target,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useCategories } from '@/api/categories'
+import { useTodos } from '@/api/todos'
 import { useAuthStore, getRefreshToken } from '@/store/auth'
 import { logout } from '@/api/auth'
 import { TodoFormSheet } from './TodoFormSheet'
 
 const navItems = [
   { to: '/app/today' as const, label: 'Today', icon: Calendar },
+  { to: '/app/focus' as const, label: 'Focus', icon: Target },
   { to: '/app/upcoming' as const, label: 'Upcoming', icon: CalendarDays },
   { to: '/app/overdue' as const, label: 'Overdue', icon: AlertCircle },
   { to: '/app/done' as const, label: 'Done', icon: CheckSquare },
@@ -25,6 +28,8 @@ const navItems = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [addOpen, setAddOpen] = useState(false)
   const { data: categories } = useCategories()
+  const { data: overdueTodos } = useTodos({ view: 'overdue' })
+  const overdueCount = overdueTodos?.length ?? 0
   const { logout: storeLogout } = useAuthStore()
   const router = useRouter()
 
@@ -109,6 +114,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             >
               <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.5} />
               {label}
+              {label === 'Overdue' && overdueCount > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/25">
+                  {overdueCount > 99 ? '99+' : overdueCount}
+                </span>
+              )}
             </Link>
           ))}
 

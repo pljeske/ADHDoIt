@@ -1,6 +1,6 @@
 -- name: CreateTodo :one
-INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
 RETURNING *;
 
 -- name: GetTodo :one
@@ -8,14 +8,16 @@ SELECT * FROM todos WHERE id = $1 AND user_id = $2;
 
 -- name: UpdateTodo :one
 UPDATE todos
-SET category_id     = $3,
-    title           = $4,
-    description     = $5,
-    deadline        = $6,
-    reminder_at     = $7,
-    reminder_job_id = $8,
-    priority        = $9,
-    updated_at      = NOW()
+SET category_id      = $3,
+    title            = $4,
+    description      = $5,
+    deadline         = $6,
+    reminder_at      = $7,
+    reminder_job_id  = $8,
+    priority         = $9,
+    duration_minutes = $10,
+    subtasks         = $11::jsonb,
+    updated_at       = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING *;
 
@@ -25,7 +27,7 @@ WHERE id = $1 AND user_id = $2
 RETURNING *;
 
 -- name: SnoozeTodo :one
-UPDATE todos SET status = 'snoozed', snooze_until = $3, updated_at = NOW()
+UPDATE todos SET deadline = $3, snooze_until = NULL, updated_at = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING *;
 

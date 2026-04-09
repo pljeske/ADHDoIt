@@ -234,9 +234,7 @@ dist
 go.work
 go.work.sum
 
-# env file
-.env
-
+# AI
 .claude
 
 # App-specific

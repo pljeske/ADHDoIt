@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTodos, type Todo } from '@/api/todos'
 import { TodoList } from '@/components/TodoList'
 import { TodoFormSheet } from '@/components/TodoFormSheet'
+import { QuickCapture } from '@/components/QuickCapture'
 import { appLayoutRoute } from './__layout'
 
 export const overdueRoute = createRoute({
@@ -29,9 +30,11 @@ function OverduePage() {
           Overdue
         </h1>
         <p className="mt-1.5 text-[13px] text-white/30 leading-relaxed">
-          Snooze, complete, or delete these to clear the backlog.
+          Reschedule, complete, or delete these to clear the backlog.
         </p>
       </div>
+
+      <QuickCapture placeholder="Add a task..." />
 
       {isLoading ? (
         <div className="space-y-1.5">

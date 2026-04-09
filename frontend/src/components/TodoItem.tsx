@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Bell, Pencil, Trash2, RotateCcw, AlarmClock } from 'lucide-react'
-import { type Todo, useDeleteTodo, useDoneTodo, useReopenTodo, useSnoozeTodo } from '@/api/todos'
+import { Bell, Check, ChevronDown, Clock, Pencil, Plus, Trash2, RotateCcw, AlarmClock } from 'lucide-react'
+import { format } from 'date-fns'
+import { type Todo, type SubtaskItem, useDeleteTodo, useDoneTodo, useReopenTodo, useSnoozeTodo, useUpdateTodo } from '@/api/todos'
 import { CategoryBadge } from './CategoryBadge'
 import { cn, formatDeadline, isOverdue, PRIORITY_LABELS } from '@/lib/utils'
 
@@ -25,21 +26,53 @@ interface TodoItemProps {
   index?: number
 }
 
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${minutes}m`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
+
+function snoozePresetDate(preset: 'tomorrow' | 'weekend' | 'nextweek'): string {
+  const d = new Date()
+  if (preset === 'tomorrow') {
+    d.setDate(d.getDate() + 1)
+  } else if (preset === 'weekend') {
+    const days = ((6 - d.getDay()) + 7) % 7 || 7
+    d.setDate(d.getDate() + days)
+  } else {
+    const days = ((1 - d.getDay()) + 7) % 7 || 7
+    d.setDate(d.getDate() + days)
+  }
+  return format(d, 'yyyy-MM-dd')
+}
+
 export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoItemProps) {
   const [snoozeDate, setSnoozeDate] = useState('')
   const [showSnoozeInput, setShowSnoozeInput] = useState(false)
+  const [subtasksExpanded, setSubtasksExpanded] = useState(false)
+  const [celebrating, setCelebrating] = useState(false)
 
   const deleteMut = useDeleteTodo()
   const doneMut = useDoneTodo()
   const reopenMut = useReopenTodo()
   const snoozeMut = useSnoozeTodo()
+  const updateMut = useUpdateTodo()
 
   const isDone = todo.status === 'done'
   const overdue = todo.deadline ? isOverdue(todo.deadline) : false
+  const subtasks = todo.subtasks ?? []
+  const subtaskTotal = subtasks.length
+  const subtaskDone = subtasks.filter((s) => s.done).length
 
   function handleDone() {
-    if (isDone) reopenMut.mutate(todo.id)
-    else doneMut.mutate(todo.id)
+    if (isDone) {
+      reopenMut.mutate(todo.id)
+    } else {
+      setCelebrating(true)
+      setTimeout(() => setCelebrating(false), 700)
+      doneMut.mutate(todo.id)
+    }
   }
 
   function handleSnooze() {
@@ -47,6 +80,19 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
     snoozeMut.mutate({ id: todo.id, snooze_until: snoozeDate })
     setShowSnoozeInput(false)
     setSnoozeDate('')
+  }
+
+  function handlePresetSnooze(preset: 'tomorrow' | 'weekend' | 'nextweek') {
+    snoozeMut.mutate({ id: todo.id, snooze_until: snoozePresetDate(preset) })
+    setShowSnoozeInput(false)
+    setSnoozeDate('')
+  }
+
+  function toggleSubtask(subtaskId: string) {
+    const updated: SubtaskItem[] = subtasks.map((s) =>
+      s.id === subtaskId ? { ...s, done: !s.done } : s,
+    )
+    updateMut.mutate({ id: todo.id, subtasks: updated })
   }
 
   return (
@@ -59,7 +105,6 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
         PRIORITY_GLOW[todo.priority] ?? '',
         'transition-all duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]',
         'hover:bg-white/[0.055] hover:border-white/[0.1]',
-        'hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_2px_0_0_var(--priority-color,transparent)]',
         isDone && 'opacity-50',
         'animate-fade-up opacity-0',
       )}
@@ -100,9 +145,7 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
             {todo.deadline && (
               <span className={cn(
                 'text-[11px] font-medium',
-                overdue && !isDone
-                  ? 'text-red-400/90'
-                  : 'text-white/30',
+                overdue && !isDone ? 'text-red-400/90' : 'text-white/30',
               )}>
                 {formatDeadline(todo.deadline)}
               </span>
@@ -115,42 +158,121 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
               </span>
             )}
 
+            {todo.duration_minutes != null && todo.duration_minutes > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-white/25">
+                <Clock className="h-2.5 w-2.5" strokeWidth={1.5} />
+                {formatDuration(todo.duration_minutes)}
+              </span>
+            )}
+
             {todo.reminder_at && (
               <Bell className="h-2.5 w-2.5 text-white/20" strokeWidth={1.5} />
             )}
+
+            {subtaskTotal > 0 && (
+              <button
+                type="button"
+                onClick={() => setSubtasksExpanded(!subtasksExpanded)}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-white/30 hover:text-white/60 transition-colors"
+              >
+                <span className={cn(
+                  'h-3.5 w-3.5 rounded-full flex items-center justify-center text-[8px] font-bold',
+                  subtaskDone === subtaskTotal
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-white/[0.08] text-white/40',
+                )}>
+                  {subtaskDone === subtaskTotal ? '✓' : subtaskDone}
+                </span>
+                {subtaskDone}/{subtaskTotal}
+                <ChevronDown className={cn(
+                  'h-2.5 w-2.5 transition-transform duration-200',
+                  subtasksExpanded && 'rotate-180',
+                )} />
+              </button>
+            )}
           </div>
 
+          {/* Subtask checklist */}
+          {subtasksExpanded && subtaskTotal > 0 && (
+            <div className="mt-2.5 space-y-1.5 pl-1">
+              {subtasks.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => toggleSubtask(s.id)}
+                  className="flex items-center gap-2 w-full text-left group/sub"
+                >
+                  <span className={cn(
+                    'h-3.5 w-3.5 flex-shrink-0 rounded flex items-center justify-center',
+                    'border transition-all duration-150',
+                    s.done
+                      ? 'border-emerald-500/50 bg-emerald-500/20'
+                      : 'border-white/20 group-hover/sub:border-white/40',
+                  )}>
+                    {s.done && <Check className="h-2 w-2 text-emerald-400" strokeWidth={3} />}
+                  </span>
+                  <span className={cn(
+                    'text-[12px] leading-tight',
+                    s.done ? 'line-through text-white/25' : 'text-white/60',
+                  )}>
+                    {s.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Reschedule panel */}
           {showSnoozeInput && (
-            <div className="mt-3 flex items-center gap-2">
-              <input
-                type="date"
-                value={snoozeDate}
-                onChange={(e) => setSnoozeDate(e.target.value)}
-                className={cn(
-                  'rounded-lg bg-white/[0.05] border border-white/[0.08]',
-                  'px-2.5 py-1.5 text-[12px] text-white/80',
-                  'focus:outline-none focus:ring-1 focus:ring-violet-500/50',
-                  '[color-scheme:dark]',
-                )}
-              />
-              <button
-                onClick={handleSnooze}
-                disabled={!snoozeDate}
-                className={cn(
-                  'px-3 py-1.5 rounded-lg text-[12px] font-medium',
-                  'bg-violet-600/25 text-violet-300 border border-violet-500/30',
-                  'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
-                  'hover:bg-violet-600/40 disabled:opacity-40 disabled:cursor-not-allowed',
-                )}
-              >
-                Snooze
-              </button>
-              <button
-                onClick={() => setShowSnoozeInput(false)}
-                className="px-3 py-1.5 rounded-lg text-[12px] text-white/35 hover:text-white/60 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="mt-3 space-y-2">
+              <div className="flex gap-1.5">
+                {(['tomorrow', 'weekend', 'nextweek'] as const).map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => handlePresetSnooze(p)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-[11px] font-medium',
+                      'bg-amber-500/10 text-amber-400/70 border border-amber-500/20',
+                      'hover:bg-amber-500/20 hover:text-amber-400',
+                      'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                    )}
+                  >
+                    {p === 'tomorrow' ? 'Tomorrow' : p === 'weekend' ? 'Weekend' : 'Next week'}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={snoozeDate}
+                  onChange={(e) => setSnoozeDate(e.target.value)}
+                  className={cn(
+                    'rounded-lg bg-white/[0.05] border border-white/[0.08]',
+                    'px-2.5 py-1.5 text-[12px] text-white/80',
+                    'focus:outline-none focus:ring-1 focus:ring-violet-500/50',
+                    '[color-scheme:dark]',
+                  )}
+                />
+                <button
+                  onClick={handleSnooze}
+                  disabled={!snoozeDate}
+                  className={cn(
+                    'px-3 py-1.5 rounded-lg text-[12px] font-medium',
+                    'bg-violet-600/25 text-violet-300 border border-violet-500/30',
+                    'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                    'hover:bg-violet-600/40 disabled:opacity-40 disabled:cursor-not-allowed',
+                  )}
+                >
+                  Reschedule
+                </button>
+                <button
+                  onClick={() => setShowSnoozeInput(false)}
+                  className="px-3 py-1.5 rounded-lg text-[12px] text-white/35 hover:text-white/60 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -169,7 +291,7 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
                 'text-white/25 transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
                 'hover:bg-amber-500/15 hover:text-amber-400',
               )}
-              title="Snooze"
+              title="Reschedule"
             >
               <AlarmClock className="h-3.5 w-3.5" strokeWidth={1.5} />
             </button>
@@ -213,6 +335,15 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
           </button>
         </div>
       </div>
+
+      {celebrating && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden rounded-2xl">
+          <div className="absolute h-8 w-8 rounded-full border-2 border-emerald-400/60 animate-celebrate-ring" />
+          <div className="absolute flex items-center justify-center h-8 w-8 rounded-full bg-emerald-500/20 animate-celebrate-check">
+            <Check className="h-4 w-4 text-emerald-400" strokeWidth={2.5} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

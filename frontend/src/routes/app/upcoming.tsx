@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useTodos, type Todo } from '@/api/todos'
 import { TodoList } from '@/components/TodoList'
 import { TodoFormSheet } from '@/components/TodoFormSheet'
+import { QuickCapture } from '@/components/QuickCapture'
 import { appLayoutRoute } from './__layout'
 
 export const upcomingRoute = createRoute({
@@ -29,6 +30,8 @@ function UpcomingPage() {
           Upcoming
         </h1>
       </div>
+
+      <QuickCapture placeholder="Add a task..." />
 
       {isLoading ? (
         <div className="space-y-1.5">

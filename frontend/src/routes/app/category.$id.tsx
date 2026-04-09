@@ -4,6 +4,7 @@ import { useTodos, type Todo } from '@/api/todos'
 import { useCategories } from '@/api/categories'
 import { TodoList } from '@/components/TodoList'
 import { TodoFormSheet } from '@/components/TodoFormSheet'
+import { QuickCapture } from '@/components/QuickCapture'
 import { appLayoutRoute } from './__layout'
 
 export const categoryRoute = createRoute({
@@ -42,6 +43,8 @@ function CategoryPage() {
           </h1>
         </div>
       </div>
+
+      <QuickCapture categoryId={id} placeholder="Add to this category..." />
 
       {isLoading ? (
         <div className="space-y-1.5">

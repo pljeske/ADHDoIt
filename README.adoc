@@ -2,8 +2,27 @@
 :toc: left
 :toc-title: Contents
 :toclevels: 2
+:icons: font
 
 ADHD-friendly multi-user todo list application. Features smart views, overdue overflow (past-deadline todos are never lost but don't clutter today's list), date/time reminders via email and Web Push, categories, and flexible sorting.
+
+== Features
+
+=== Core
+
+* *Smart views* — Today, Upcoming, Overdue, Done, and per-Category
+* *Overdue section* — overdue items surface in a collapsible section on the Today view, keeping the main list clean without losing anything
+* *Priority levels* — None / Low / Medium / High with colour-coded indicators
+* *Reminders* — opt-in email and Web Push notifications via a scheduled job queue (River on Postgres — no Redis needed)
+* *Categories* — colour-tagged groupings with per-category views
+
+=== ADHD UX
+
+* *Quick Capture bar* — inline input at the top of every list; press Enter to add instantly without opening a form
+* *Reschedule quick presets* — Tomorrow / Weekend / Next week pills above the date picker; reschedules the deadline without hiding the todo
+* *Overdue badge* — live count in the sidebar so nothing slips out of view
+* *Today progress counter* — "X tasks today" that updates to "X / Y done" as you work
+* *Completion micro-celebration* — brief ring + checkmark animation when a task is marked done
 
 == Architecture
 
@@ -43,16 +62,20 @@ ADHD-friendly multi-user todo list application. Features smart views, overdue ov
 cp .env.example .env
 
 # 2. Set required secrets in .env:
-#   - DB_PASSWORD
-#   - JWT_SECRET (min 32 characters)
-#   - SMTP_* (optional, for email reminders)
-#   - VAPID_* (optional, for Web Push notifications)
+#   DB_PASSWORD, JWT_SECRET (min 32 chars)
+#   SMTP_* and VAPID_* are optional — see below
 
 # 3. Start everything
 docker compose up
 ----
 
-The app will be available at http://localhost (port 80) or https://localhost (port 443).
+The app will be available at http://localhost:8080.
+
+[NOTE]
+====
+The `DOMAIN` variable defaults to `localhost`. Caddy runs over plain HTTP on port 8080 in the default configuration.
+Remove the `http://` prefix from `frontend/Caddyfile` and expose ports 80/443 to enable automatic Let's Encrypt TLS.
+====
 
 === Local Development (without Docker)
 
@@ -80,10 +103,9 @@ The API listens on http://localhost:8080.
 ----
 cd frontend
 npm install
-npm run dev
+npm run dev         # dev server at http://localhost:5173
+npm run build       # type-check + production build (faster than docker build for TS errors)
 ----
-
-The dev server starts at http://localhost:5173 and proxies `/api` requests to the backend.
 
 == Environment Variables
 
@@ -168,6 +190,11 @@ All variables are defined in `.env.example`. Copy it to `.env` and fill in the r
 
 === Generating VAPID Keys
 
+[TIP]
+====
+Generate VAPID keys once and keep them in your `.env`. Rotating keys invalidates all existing push subscriptions.
+====
+
 [source,bash]
 ----
 npx web-push generate-vapid-keys
@@ -179,7 +206,7 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 
 === Auth
 
-[cols="1,3,3"]
+[cols="2,3,3"]
 |===
 |Method + Path |Request body |Response
 
@@ -200,9 +227,11 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 |`204`
 |===
 
+Refresh tokens are rotated on every `/auth/refresh` call.
+
 === Todos
 
-[cols="1,3"]
+[cols="2,3"]
 |===
 |Method + Path |Notes
 
@@ -210,30 +239,35 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 |Query params: `view=today\|upcoming\|overdue\|done\|category`, `category_id=<uuid>`
 
 |`POST /todos`
-|Fields: `title` (required), `description`, `category_id`, `deadline` (YYYY-MM-DD), `priority` (0–3), `reminder_at` (RFC3339)
+|Fields: `title` (required), `description`, `category_id`, `deadline` (YYYY-MM-DD), `priority` (0–3), `reminder_at` (RFC 3339)
 
 |`GET /todos/:id`
 |
 
 |`PATCH /todos/:id`
-|Partial update of any create field
+|Partial update of any create field; changing `reminder_at` cancels and re-schedules the reminder job
 
 |`DELETE /todos/:id`
 |Hard delete — `204`
 
 |`POST /todos/:id/snooze`
-|Body: `{ snooze_until: "YYYY-MM-DD" }`
+|Body: `{ snooze_until: "YYYY-MM-DD" }` — reschedules `deadline` to the given date; `status` stays `active`
 
 |`POST /todos/:id/done`
 |Sets `status=done`, records `done_at`
 
 |`POST /todos/:id/reopen`
-|Clears `done_at` and `snooze_until`, sets `status=active`
+|Clears `done_at`, sets `status=active`
 |===
+
+[NOTE]
+====
+`status` is not directly settable via `PATCH /todos/:id`. Use the dedicated action endpoints (`/snooze`, `/done`, `/reopen`) to maintain invariants.
+====
 
 === Categories
 
-[cols="1,3"]
+[cols="2,3"]
 |===
 |Method + Path |Notes
 
@@ -252,7 +286,7 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 
 === Push Subscriptions
 
-[cols="1,3"]
+[cols="2,3"]
 |===
 |Method + Path |Notes
 
@@ -263,38 +297,49 @@ Base path: `/api/v1`. All authenticated endpoints require `Authorization: Bearer
 |`{ endpoint }`
 |===
 
+=== Error Responses
+
+All errors follow a consistent shape:
+
+[source,json]
+----
+{ "error": "human-readable message", "code": "MACHINE_CODE" }
+----
+
 == Project Structure
 
 ----
 adhdo-it/
 ├── CLAUDE.md                        Implementation spec
-├── Caddyfile                        Reverse proxy config
 ├── compose.yml
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
 │   ├── go.mod / go.sum
-│   ├── cmd/server/main.go           Entry point
+│   ├── cmd/server/main.go           Entry point (HTTP server + River worker)
 │   └── internal/
 │       ├── config/                  Env var loading
 │       ├── db/
 │       │   ├── migrations/          SQL migration files
 │       │   ├── queries/             SQL query files (sqlc source)
-│       │   ├── models.go            Domain structs
-│       │   ├── *.sql.go             Hand-written query implementations
 │       │   └── sqlc.yaml
 │       ├── handler/                 HTTP handlers (auth, todos, categories, push)
 │       ├── middleware/              JWT auth, request logging
-│       ├── model/                   Shared domain types (context keys)
+│       ├── model/                   Shared domain types
 │       ├── notification/            SMTP email + Web Push dispatch
-│       ├── server/                  Router setup, River worker initialization
+│       ├── server/                  Router setup
 │       └── worker/                  River job definitions
 └── frontend/
+    ├── Caddyfile                    Baked into frontend image
     ├── Dockerfile
     ├── public/sw.js                 Service worker for Web Push
     └── src/
         ├── api/                     TanStack Query hooks + fetch wrappers
-        ├── components/              React components (AppShell, TodoItem, sheets, UI)
+        ├── components/              React components
+        │   ├── AppShell.tsx         Sidebar, nav, overdue badge
+        │   ├── QuickCapture.tsx     Inline task creation bar
+        │   ├── TodoItem.tsx         Item row, reschedule presets, celebration
+        │   └── TodoFormSheet.tsx    Add / edit sheet
         ├── lib/                     Utilities, service worker registration
         ├── routes/                  TanStack Router route definitions
         ├── store/                   Zustand auth store
@@ -303,20 +348,34 @@ adhdo-it/
 
 == Key Design Decisions
 
-* *Stateless backend* — no session storage; JWTs for access, rotating opaque refresh tokens stored as SHA-256 hashes in Postgres.
-* *Overdue is derived, never stored* — `deadline < today AND status = active`. The `today` view fetches both today's todos and overdue todos; overdue items appear in a collapsible section.
-* *`status` changes only through action endpoints* — `PATCH /todos/:id` cannot set `status` directly; use `/snooze`, `/done`, `/reopen` to maintain invariants.
-* *Deadlines are dates, not timestamps* — avoids timezone confusion. "Today" is resolved server-side using the user's stored timezone.
-* *River on Postgres* — job queue shares the application database; no Redis or separate queue infrastructure needed.
-* *Hard deletes only* — the `done` status acts as the archive; no soft-delete complexity.
+Stateless backend:: No session storage. JWTs for access tokens, rotating opaque refresh tokens stored as SHA-256 hashes in Postgres.
+
+Overdue is derived, never stored:: `deadline < today AND status = active`. The Today view fetches both today's and overdue todos; overdue items appear in a collapsible section.
+
+`status` via action endpoints only:: `PATCH /todos/:id` cannot set `status` directly. Use `/snooze`, `/done`, `/reopen` to maintain invariants. `/snooze` reschedules the deadline without touching `status` — the todo stays active and reappears in Today or Upcoming on the new date.
+
+Deadlines are dates, not timestamps:: Avoids timezone confusion. "Today" is resolved server-side using the user's stored `timezone` field.
+
+River on Postgres:: Job queue shares the application database. No Redis or separate queue infrastructure needed.
+
+Hard deletes only:: The `done` status acts as the archive. No soft-delete complexity.
+
+Default reminder at creation + 1 h:: Both the form sheet and Quick Capture automatically set `reminder_at` to one hour from now. Users can clear or adjust before saving.
 
 == Production Deployment
-
-Set `DOMAIN` to your hostname and Caddy will automatically obtain and renew a Let's Encrypt certificate. Expose ports 80, 443, and 443/UDP (HTTP/3).
 
 [source,bash]
 ----
 DOMAIN=todo.example.com docker compose up -d
 ----
 
-Ensure `ENVIRONMENT=production` so the Go server uses JSON structured logging and does not attempt to load a local `.env` file.
+[IMPORTANT]
+====
+Before deploying publicly:
+
+. Remove the `http://` prefix from `frontend/Caddyfile` (it disables auto-HTTPS in the default local config).
+. Expose ports 80, 443, and 443/UDP (HTTP/3) instead of 8080.
+. Set `ENVIRONMENT=production` so the Go server uses JSON structured logging and does not load a local `.env` file.
+
+Caddy will automatically obtain and renew a Let's Encrypt certificate once the domain resolves to your server.
+====

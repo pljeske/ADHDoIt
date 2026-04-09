@@ -8,6 +8,7 @@ import { upcomingRoute } from './routes/app/upcoming'
 import { overdueRoute } from './routes/app/overdue'
 import { doneRoute } from './routes/app/done'
 import { categoryRoute } from './routes/app/category.$id'
+import { focusRoute } from './routes/app/focus'
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
@@ -19,5 +20,6 @@ export const routeTree = rootRoute.addChildren([
     overdueRoute,
     doneRoute,
     categoryRoute,
+    focusRoute,
   ]),
 ])

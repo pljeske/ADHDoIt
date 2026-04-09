@@ -7,31 +7,39 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const allTodoCols = `id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks`
+
 const createTodo = `
-INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
-`
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+RETURNING ` + allTodoCols
 
 type CreateTodoParams struct {
-	UserID      uuid.UUID
-	CategoryID  pgtype.UUID
-	Title       string
-	Description pgtype.Text
-	Deadline    pgtype.Date
-	ReminderAt  pgtype.Timestamptz
-	Priority    int16
+	UserID          uuid.UUID
+	CategoryID      pgtype.UUID
+	Title           string
+	Description     pgtype.Text
+	Deadline        pgtype.Date
+	ReminderAt      pgtype.Timestamptz
+	Priority        int16
+	DurationMinutes pgtype.Int4
+	Subtasks        []byte
 }
 
 func (q *Queries) CreateTodo(ctx context.Context, p *CreateTodoParams) (*Todo, error) {
+	subtasks := p.Subtasks
+	if len(subtasks) == 0 {
+		subtasks = []byte("[]")
+	}
 	row := q.db.QueryRow(ctx, createTodo,
 		p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline, p.ReminderAt, p.Priority,
+		p.DurationMinutes, subtasks,
 	)
 	return scanTodo(row)
 }
 
 const getTodo = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos WHERE id = $1 AND user_id = $2
 `
 
@@ -42,33 +50,41 @@ func (q *Queries) GetTodo(ctx context.Context, id, userID uuid.UUID) (*Todo, err
 
 const updateTodo = `
 UPDATE todos
-SET category_id     = $3,
-    title           = $4,
-    description     = $5,
-    deadline        = $6,
-    reminder_at     = $7,
-    reminder_job_id = $8,
-    priority        = $9,
-    updated_at      = NOW()
+SET category_id      = $3,
+    title            = $4,
+    description      = $5,
+    deadline         = $6,
+    reminder_at      = $7,
+    reminder_job_id  = $8,
+    priority         = $9,
+    duration_minutes = $10,
+    subtasks         = $11::jsonb,
+    updated_at       = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
-`
+RETURNING ` + allTodoCols
 
 type UpdateTodoParams struct {
-	ID            uuid.UUID
-	UserID        uuid.UUID
-	CategoryID    pgtype.UUID
-	Title         string
-	Description   pgtype.Text
-	Deadline      pgtype.Date
-	ReminderAt    pgtype.Timestamptz
-	ReminderJobID pgtype.Int8
-	Priority      int16
+	ID              uuid.UUID
+	UserID          uuid.UUID
+	CategoryID      pgtype.UUID
+	Title           string
+	Description     pgtype.Text
+	Deadline        pgtype.Date
+	ReminderAt      pgtype.Timestamptz
+	ReminderJobID   pgtype.Int8
+	Priority        int16
+	DurationMinutes pgtype.Int4
+	Subtasks        []byte
 }
 
 func (q *Queries) UpdateTodo(ctx context.Context, p *UpdateTodoParams) (*Todo, error) {
+	subtasks := p.Subtasks
+	if len(subtasks) == 0 {
+		subtasks = []byte("[]")
+	}
 	row := q.db.QueryRow(ctx, updateTodo,
-		p.ID, p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline, p.ReminderAt, p.ReminderJobID, p.Priority,
+		p.ID, p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline,
+		p.ReminderAt, p.ReminderJobID, p.Priority, p.DurationMinutes, subtasks,
 	)
 	return scanTodo(row)
 }
@@ -76,8 +92,7 @@ func (q *Queries) UpdateTodo(ctx context.Context, p *UpdateTodoParams) (*Todo, e
 const setTodoDone = `
 UPDATE todos SET status = 'done', done_at = NOW(), updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
-`
+RETURNING ` + allTodoCols
 
 func (q *Queries) SetTodoDone(ctx context.Context, id, userID uuid.UUID) (*Todo, error) {
 	row := q.db.QueryRow(ctx, setTodoDone, id, userID)
@@ -85,10 +100,9 @@ func (q *Queries) SetTodoDone(ctx context.Context, id, userID uuid.UUID) (*Todo,
 }
 
 const snoozeTodo = `
-UPDATE todos SET status = 'snoozed', snooze_until = $3, updated_at = NOW()
+UPDATE todos SET deadline = $3, snooze_until = NULL, updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
-`
+RETURNING ` + allTodoCols
 
 func (q *Queries) SnoozeTodo(ctx context.Context, id, userID uuid.UUID, snoozeUntil pgtype.Date) (*Todo, error) {
 	row := q.db.QueryRow(ctx, snoozeTodo, id, userID, snoozeUntil)
@@ -98,8 +112,7 @@ func (q *Queries) SnoozeTodo(ctx context.Context, id, userID uuid.UUID, snoozeUn
 const reopenTodo = `
 UPDATE todos SET status = 'active', done_at = NULL, snooze_until = NULL, updated_at = NOW()
 WHERE id = $1 AND user_id = $2
-RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
-`
+RETURNING ` + allTodoCols
 
 func (q *Queries) ReopenTodo(ctx context.Context, id, userID uuid.UUID) (*Todo, error) {
 	row := q.db.QueryRow(ctx, reopenTodo, id, userID)
@@ -114,7 +127,7 @@ func (q *Queries) DeleteTodo(ctx context.Context, id, userID uuid.UUID) error {
 }
 
 const listTodosToday = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE user_id = $1
   AND status = 'active'
@@ -127,7 +140,7 @@ func (q *Queries) ListTodosToday(ctx context.Context, userID uuid.UUID, timezone
 }
 
 const listTodosUpcoming = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE user_id = $1
   AND status = 'active'
@@ -140,7 +153,7 @@ func (q *Queries) ListTodosUpcoming(ctx context.Context, userID uuid.UUID, timez
 }
 
 const listTodosOverdue = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE user_id = $1
   AND status IN ('active', 'snoozed')
@@ -170,7 +183,7 @@ func (q *Queries) listTodos(ctx context.Context, query string, userID uuid.UUID,
 }
 
 const listTodosDone = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE user_id = $1
   AND status = 'done'
@@ -195,7 +208,7 @@ func (q *Queries) ListTodosDone(ctx context.Context, userID uuid.UUID) ([]*Todo,
 }
 
 const listTodosByCategory = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE user_id = $1
   AND category_id = $2
@@ -221,7 +234,7 @@ func (q *Queries) ListTodosByCategory(ctx context.Context, userID, categoryID uu
 }
 
 const getTodosWithDueReminder = `
-SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at
+SELECT ` + allTodoCols + `
 FROM todos
 WHERE reminder_at IS NOT NULL
   AND reminder_at <= NOW()
@@ -251,6 +264,7 @@ func scanTodo(row interface{ Scan(...any) error }) (*Todo, error) {
 		&t.ID, &t.UserID, &t.CategoryID, &t.Title, &t.Description,
 		&t.Deadline, &t.ReminderAt, &t.ReminderJobID, &t.Priority, &t.Status,
 		&t.SnoozeUntil, &t.DoneAt, &t.CreatedAt, &t.UpdatedAt,
+		&t.DurationMinutes, &t.Subtasks,
 	)
 	if err != nil {
 		return nil, err

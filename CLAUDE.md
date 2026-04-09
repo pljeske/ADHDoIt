@@ -13,6 +13,9 @@ docker compose logs -f frontend
 # Frontend dev server (from frontend/)
 npm run dev
 
+# Type-check + production build (from frontend/) — faster than docker build for TS errors
+npm run build
+
 # Regenerate sqlc queries (from backend/internal/db/)
 sqlc generate
 ```
@@ -31,7 +34,6 @@ ADHDoIt is a multi-user todo list application designed with ADHD-friendly UX in 
 adhdo-it/
 ├── CLAUDE.md                  ← this file
 ├── compose.yml
-├── Caddyfile
 ├── .env.example
 ├── backend/
 │   ├── Dockerfile
@@ -55,6 +57,7 @@ adhdo-it/
 │   └── Dockerfile
 └── frontend/
     ├── Dockerfile
+    ├── Caddyfile              ← baked into frontend image
     ├── index.html
     ├── vite.config.ts
     ├── tailwind.config.ts
@@ -598,9 +601,15 @@ Right-side sheet (shadcn/ui `Sheet`). Fields:
 - Deadline (date picker, defaults to today)
 - Category (select, with "New category" inline creation)
 - Priority (segmented control: none / low / medium / high)
-- Reminder (datetime picker, optional)
+- Reminder (datetime picker — defaults to 1 hour from now for new todos; blank for edits if no existing reminder)
 
 On submit: optimistic update via TanStack Query.
+
+### QuickCapture component
+
+Inline text input bar at the top of list views (Today, Upcoming, Overdue, Category). Press Enter to create instantly without opening a sheet; Escape clears the input. Automatically sets `reminder_at` to 1 hour from creation time. Today view also sets `deadline` to today's date; Category view sets `category_id`.
+
+Source: `src/components/QuickCapture.tsx`
 
 ### SortControls
 
@@ -620,11 +629,11 @@ State lives in URL search params so sorting is shareable and survives refresh.
 Service worker file (`public/sw.js`):
 ```javascript
 self.addEventListener('push', event => {
-    const data = event.data?.json() ?? {};
+    let data = {};
+    try { data = event.data?.json() ?? {}; } catch (_) {}
     event.waitUntil(
         self.registration.showNotification(data.title ?? 'ADHDoIt', {
             body: data.body,
-            icon: '/icon-192.png',
             data: { url: data.url ?? '/' }
         })
     );
@@ -640,130 +649,16 @@ self.addEventListener('notificationclick', event => {
 
 ## Docker setup
 
-### `compose.yml`
+### `compose.yml` / `frontend/Caddyfile` / Dockerfiles
 
-```yaml
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: adhdo
-      POSTGRES_USER: adhdo
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U adhdo"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
+See the actual files — these change frequently and the files are the source of truth.
 
-  app:
-    build:
-      context: ./backend
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgres://adhdo:${DB_PASSWORD}@db:5432/adhdo?sslmode=disable
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
-      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-720h}
-      PORT: 8080
-      ENVIRONMENT: production
-      SMTP_HOST: ${SMTP_HOST}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASSWORD: ${SMTP_PASSWORD}
-      SMTP_FROM: ${SMTP_FROM}
-      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
-      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
-      VAPID_SUBJECT: ${VAPID_SUBJECT}
-    depends_on:
-      db:
-        condition: service_healthy
-
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
-        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"   # HTTP/3
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
-    depends_on: [app]
-
-volumes:
-  pgdata:
-  caddy_data:
-  caddy_config:
-```
-
-### `Caddyfile`
-
-```caddy
-{$DOMAIN:localhost} {
-    encode gzip
-
-    # Reverse proxy API requests to the Go service
-    handle /api/* {
-        reverse_proxy app:8080
-    }
-
-    # Serve SPA — all unknown paths fall back to index.html
-    handle {
-        root * /srv
-        try_files {path} /index.html
-        file_server
-    }
-
-    # Long-term cache for hashed Vite assets
-    header /assets/* Cache-Control "public, max-age=31536000, immutable"
-}
-```
-
-When `DOMAIN` is set to a real hostname (not `localhost`), Caddy automatically obtains and renews a TLS certificate via Let's Encrypt. No extra configuration needed. For local development, it falls back to a self-signed cert. Expose port `443/udp` in Compose for HTTP/3 support.
-
-### `backend/Dockerfile`
-
-```dockerfile
-FROM golang:1.23-alpine AS builder
-WORKDIR /app
-RUN apk add --no-cache git
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /adhdo-server ./cmd/server
-
-FROM gcr.io/distroless/static-debian12
-COPY --from=builder /adhdo-server /adhdo-server
-ENTRYPOINT ["/adhdo-server"]
-```
-
-### `frontend/Dockerfile`
-
-```dockerfile
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-ARG VITE_API_BASE_URL
-ARG VITE_VAPID_PUBLIC_KEY
-RUN npm run build
-
-FROM caddy:2-alpine
-COPY --from=builder /app/dist /srv
-COPY --from=builder /app/public/sw.js /srv/sw.js
-```
+Key notes:
+- Frontend listens on port **8080** (Podman rootless can't bind port 80)
+- Caddyfile is **baked into the frontend image** (`frontend/Caddyfile`), not mounted as a volume
+- `http://` prefix in the Caddyfile site address disables auto-HTTPS/redirect (for local dev)
+- For production: remove `http://` prefix and set `DOMAIN` to your hostname; Caddy handles Let's Encrypt automatically
+- Dockerfiles inject `VERSION`, `COMMIT`, `BUILD_DATE` build args and set OCI LABEL instructions
 
 ---
 

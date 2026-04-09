@@ -1,6 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './client'
 
+export interface SubtaskItem {
+  id: string
+  title: string
+  done: boolean
+}
+
 export interface Todo {
   id: string
   user_id: string
@@ -15,6 +21,8 @@ export interface Todo {
   done_at: string | null
   created_at: string
   updated_at: string
+  duration_minutes: number | null
+  subtasks: SubtaskItem[]
 }
 
 export type TodoView = 'today' | 'upcoming' | 'overdue' | 'done' | 'category'
@@ -42,6 +50,8 @@ export interface CreateTodoData {
   deadline?: string
   priority?: number
   reminder_at?: string | null
+  duration_minutes?: number | null
+  subtasks?: SubtaskItem[]
 }
 
 export interface UpdateTodoData {
@@ -51,6 +61,8 @@ export interface UpdateTodoData {
   deadline?: string
   priority?: number
   reminder_at?: string | null
+  duration_minutes?: number | null
+  subtasks?: SubtaskItem[]
 }
 
 export function useCreateTodo() {
