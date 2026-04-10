@@ -51,6 +51,7 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
   const [snoozeDate, setSnoozeDate] = useState('')
   const [showSnoozeInput, setShowSnoozeInput] = useState(false)
   const [subtasksExpanded, setSubtasksExpanded] = useState(false)
+  const [descExpanded, setDescExpanded] = useState(false)
   const [celebrating, setCelebrating] = useState(false)
 
   const deleteMut = useDeleteTodo()
@@ -132,48 +133,70 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
 
         {/* Content */}
         <div className="min-w-0 flex-1">
-          <p className={cn(
-            'text-[13.5px] font-medium leading-snug tracking-[-0.01em]',
-            isDone ? 'line-through text-white/25' : 'text-white/85',
-          )}>
-            {todo.title}
-          </p>
+          <div className="flex items-start gap-1.5">
+            <p
+              onClick={() => onEdit?.(todo)}
+              className={cn(
+                'flex-1 text-[13.5px] font-medium leading-snug tracking-[-0.01em]',
+                isDone ? 'line-through text-white/25' : 'text-white/85',
+                onEdit && 'cursor-pointer hover:text-white transition-colors duration-150',
+              )}
+            >
+              {todo.title}
+            </p>
+            {todo.description && (
+              <button
+                type="button"
+                onClick={() => setDescExpanded((v) => !v)}
+                className="mt-[3px] flex-shrink-0 text-white/20 hover:text-white/50 transition-colors duration-150"
+                title={descExpanded ? 'Hide description' : 'Show description'}
+              >
+                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform duration-200', descExpanded && 'rotate-180')} />
+              </button>
+            )}
+          </div>
+
+          {descExpanded && todo.description && (
+            <p className="mt-1.5 text-[12.5px] leading-relaxed text-white/60 whitespace-pre-wrap">
+              {todo.description}
+            </p>
+          )}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
             {todo.category_id && <CategoryBadge categoryId={todo.category_id} />}
 
             {todo.deadline && (
               <span className={cn(
-                'text-[11px] font-medium',
-                overdue && !isDone ? 'text-red-400/90' : 'text-white/30',
+                'text-[12px] font-medium',
+                overdue && !isDone ? 'text-red-400/90' : 'text-white/50',
               )}>
                 {formatDeadline(todo.deadline)}
               </span>
             )}
 
             {todo.priority > 0 && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-white/25">
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-white/45">
                 <span className={cn('h-1.5 w-1.5 rounded-full', PRIORITY_DOT[todo.priority])} />
                 {PRIORITY_LABELS[todo.priority]}
               </span>
             )}
 
             {todo.duration_minutes != null && todo.duration_minutes > 0 && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-white/25">
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-white/45">
                 <Clock className="h-2.5 w-2.5" strokeWidth={1.5} />
                 {formatDuration(todo.duration_minutes)}
               </span>
             )}
 
             {todo.reminder_at && (
-              <Bell className="h-2.5 w-2.5 text-white/20" strokeWidth={1.5} />
+              <Bell className="h-2.5 w-2.5 text-white/40" strokeWidth={1.5} />
             )}
 
             {subtaskTotal > 0 && (
               <button
                 type="button"
                 onClick={() => setSubtasksExpanded(!subtasksExpanded)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-white/30 hover:text-white/60 transition-colors"
+                className="inline-flex items-center gap-1 text-[12px] font-medium text-white/45 hover:text-white/70 transition-colors"
               >
                 <span className={cn(
                   'h-3.5 w-3.5 rounded-full flex items-center justify-center text-[8px] font-bold',

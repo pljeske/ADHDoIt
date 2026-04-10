@@ -68,7 +68,7 @@ function TodayPage() {
     <div className="mx-auto max-w-2xl px-6 py-8">
       {/* Header */}
       <div className="mb-6 animate-fade-up opacity-0" style={{ animationDelay: '0ms' }}>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/25 mb-1">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45 mb-1">
           {todayDate}
         </p>
         <h1 className="text-[28px] font-semibold tracking-[-0.03em] text-white/90">
@@ -76,11 +76,11 @@ function TodayPage() {
         </h1>
         {!loadingToday && totalToday > 0 && (
           <div className="mt-1 flex items-center gap-3 flex-wrap">
-            <p className="text-[13px] text-white/30 tabular-nums">
+            <p className="text-[13px] text-white/55 tabular-nums">
               {doneToday > 0 ? `${doneToday} / ${totalToday} done` : `${totalToday} ${totalToday === 1 ? 'task' : 'tasks'} today`}
             </p>
             {totalEstimatedMinutes > 0 && (
-              <span className="inline-flex items-center gap-1 text-[12px] text-white/20">
+              <span className="inline-flex items-center gap-1 text-[12px] text-white/45">
                 <Clock className="h-3 w-3" strokeWidth={1.5} />
                 {formatTotal(totalEstimatedMinutes)} estimated
               </span>

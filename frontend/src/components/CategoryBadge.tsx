@@ -17,7 +17,7 @@ export function CategoryBadge({ categoryId, className }: Props) {
     <span
       className={cn(
         'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full',
-        'text-[10px] font-medium tracking-[0.04em]',
+        'text-[11px] font-medium tracking-[0.03em]',
         'border border-white/[0.08]',
         'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
         className,

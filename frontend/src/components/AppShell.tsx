@@ -170,9 +170,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               style={{ animationDelay: `${i * 60}ms` }}
               className={cn(
                 'flex items-center gap-2.5 px-3 py-2 rounded-xl',
-                'text-[13px] font-medium text-white/40',
+                'text-[13px] font-medium text-white/55',
                 'transition-all duration-250 ease-[cubic-bezier(0.32,0.72,0,1)]',
-                'hover:bg-white/[0.06] hover:text-white/80',
+                'hover:bg-white/[0.06] hover:text-white/85',
                 '[&.active]:bg-white/[0.08] [&.active]:text-white [&.active]:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]',
                 'animate-fade-up opacity-0',
               )}
@@ -190,7 +190,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Categories */}
           <div className="pt-4">
             <div className="px-3 pb-1.5 flex items-center justify-between">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/20">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-white/40">
                 Categories
               </p>
               <button
@@ -303,7 +303,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </div>
                   </div>
                 ) : (
-                  <div className="group flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-white/35 transition-all duration-250 hover:bg-white/[0.06] hover:text-white/75 [&:has(a.active)]:bg-white/[0.08] [&:has(a.active)]:text-white">
+                  <div className="group flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-white/55 transition-all duration-250 hover:bg-white/[0.06] hover:text-white/85 [&:has(a.active)]:bg-white/[0.08] [&:has(a.active)]:text-white">
                     <Link
                       to="/app/category/$id"
                       params={{ id: cat.id }}

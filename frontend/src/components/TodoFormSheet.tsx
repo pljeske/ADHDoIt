@@ -246,7 +246,7 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
                         'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
                         field.value === opt.value
                           ? 'bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ' + opt.color
-                          : 'text-white/25 hover:text-white/45',
+                          : 'text-white/45 hover:text-white/65',
                       )}
                     >
                       {opt.label}

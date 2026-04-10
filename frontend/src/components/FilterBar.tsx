@@ -35,7 +35,7 @@ export function FilterBar({ filters, onChange, categories }: FilterBarProps) {
               'transition-all duration-200 ease-[cubic-bezier(0.32,0.72,0,1)]',
               filters.priority === p.value
                 ? 'bg-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] ' + p.color
-                : 'text-white/25 hover:text-white/50',
+                : 'text-white/45 hover:text-white/65',
             )}
           >
             {p.label}
@@ -49,10 +49,10 @@ export function FilterBar({ filters, onChange, categories }: FilterBarProps) {
           onChange={(e) => onChange({ ...filters, categoryId: e.target.value || null })}
           className={cn(
             'rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-1.5',
-            'text-[11px] font-medium text-white/40 [color-scheme:dark]',
+            'text-[12px] font-medium text-white/55 [color-scheme:dark]',
             'focus:outline-none focus:ring-1 focus:ring-violet-500/40',
             'transition-all duration-200',
-            filters.categoryId && 'text-white/70',
+            filters.categoryId && 'text-white/80',
           )}
         >
           <option value="">All categories</option>
@@ -66,7 +66,7 @@ export function FilterBar({ filters, onChange, categories }: FilterBarProps) {
         <button
           type="button"
           onClick={() => onChange({ priority: null, categoryId: null })}
-          className="px-2.5 py-1.5 rounded-xl text-[11px] text-white/30 hover:text-white/60 hover:bg-white/[0.04] transition-all"
+          className="px-2.5 py-1.5 rounded-xl text-[12px] text-white/50 hover:text-white/70 hover:bg-white/[0.04] transition-all"
         >
           Clear
         </button>

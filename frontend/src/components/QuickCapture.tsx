@@ -58,7 +58,7 @@ export function QuickCapture({ defaultDeadline, categoryId, placeholder = 'Add a
         placeholder={placeholder}
         className={cn(
           'flex-1 bg-transparent text-[13.5px] font-medium',
-          'text-white/80 placeholder:text-white/20',
+          'text-white/80 placeholder:text-white/40',
           'focus:outline-none',
         )}
       />
