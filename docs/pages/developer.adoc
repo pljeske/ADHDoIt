@@ -1,0 +1,205 @@
+ifndef::imagesdir[]
+:imagesdir: ../images
+endif::[]
+
+= Developer Guide
+
+== Quick Start
+
+[source,bash]
+----
+cp .env.example .env        # fill in JWT_SECRET (min 32 chars) and DB_PASSWORD
+docker compose up
+----
+
+App is available at http://localhost:8080.
+
+== Local Development
+
+[source,bash]
+----
+# Database only
+docker compose up db
+
+# Backend
+cd backend && go run ./cmd/server
+
+# Frontend
+cd frontend && npm install && npm run dev   # http://localhost:5173
+----
+
+Use `npm run build` in `frontend/` to type-check without a Docker rebuild.
+
+== Environment Variables
+
+Only non-obvious ones are listed here. See `.env.example` for the full set.
+
+[cols="2,3"]
+|===
+|Variable |Notes
+
+|`JWT_SECRET`
+|Minimum 32 characters. Changing this invalidates all active sessions.
+
+|`DOMAIN`
+|Used by Caddy. Defaults to `localhost`. Set to your real hostname for automatic Let's Encrypt TLS — but also remove the `http://` prefix from `frontend/Caddyfile` (that prefix disables auto-HTTPS).
+
+|`ENVIRONMENT`
+|Set to `development` to load `.env` automatically and use human-readable log output. Production uses JSON structured logs and ignores `.env`.
+
+|`VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
+|Generate once with `npx web-push generate-vapid-keys`. Rotating these invalidates all existing push subscriptions.
+
+|`VITE_VAPID_PUBLIC_KEY`
+|Must match `VAPID_PUBLIC_KEY`. This is a build-time variable injected into the frontend bundle.
+|===
+
+== Architecture
+
+[cols="1,2"]
+|===
+|Layer |Technology
+
+|Backend
+|Go — stateless REST API (chi router, pgx/v5, sqlc)
+
+|Frontend
+|React 18 + TypeScript (TanStack Router, TanStack Query, Zustand, shadcn/ui + Tailwind v4)
+
+|Database
+|PostgreSQL 16
+
+|Reverse Proxy
+|Caddy 2 (SPA fallback, API proxy, automatic TLS)
+
+|Job Queue
+|River (PostgreSQL-backed — no Redis)
+|===
+
+The backend and River worker run in the same binary as separate goroutines. The HTTP server is stateless; all persistent state lives in Postgres.
+
+== Key Design Decisions
+
+*Deadlines are `DATE`, not `TIMESTAMPTZ`*::
+Avoids timezone confusion. "Today" is resolved server-side using the user's stored `timezone` field. Reminders use `TIMESTAMPTZ` because they represent a specific moment.
+
+*`status` via action endpoints only*::
+`PATCH /todos/:id` cannot set `status` directly. Use `/snooze`, `/done`, `/reopen`. Snooze reschedules the deadline without touching `status` — the task stays active and reappears in Today or Upcoming on the new date.
+
+*Overdue is derived, never stored*::
+`deadline < today AND status = active`. The Today view fetches both today and overdue; they are merged client-side.
+
+*Rotating refresh tokens*::
+Every `/auth/refresh` call issues a new token pair and invalidates the old refresh token. The frontend stores the access token in memory (Zustand) and the refresh token in `localStorage`. On load, a single silent refresh runs before any queries fire — the UI is gated behind `isAuthReady` to prevent a logout loop from double-refresh.
+
+*Hard deletes only*::
+The `done` status is the archive. No soft-delete complexity.
+
+== API Reference
+
+Base path: `/api/v1`. Authenticated endpoints require `Authorization: Bearer <access_token>`.
+
+=== Auth
+
+[cols="2,3"]
+|===
+|Endpoint |Notes
+
+|`POST /auth/register`
+|`{ email, name, password, timezone }` → `{ user, access_token, refresh_token }`
+
+|`POST /auth/login`
+|`{ email, password }` → same shape as register
+
+|`POST /auth/refresh`
+|`{ refresh_token }` → new token pair (old token is invalidated)
+
+|`DELETE /auth/logout`
+|Authenticated. Deletes the refresh token. Returns 204.
+|===
+
+=== Todos
+
+[cols="2,3"]
+|===
+|Endpoint |Notes
+
+|`GET /todos`
+|`?view=today\|upcoming\|overdue\|done`, optional `category_id`
+
+|`POST /todos`
+|`title` required. `deadline` defaults to today. `priority` 0–3. `reminder_at` RFC 3339.
+
+|`PATCH /todos/:id`
+|Partial update of any create field. Changing `reminder_at` cancels and re-enqueues the reminder job atomically.
+
+|`DELETE /todos/:id`
+|Hard delete. 204.
+
+|`POST /todos/:id/snooze`
+|`{ snooze_until: "YYYY-MM-DD" }` — reschedules deadline, status stays `active`
+
+|`POST /todos/:id/done`
+|Sets `status=done`, records `done_at`
+
+|`POST /todos/:id/reopen`
+|Clears `done_at`, sets `status=active`
+|===
+
+=== Categories
+
+[cols="2,3"]
+|===
+|Endpoint |Notes
+
+|`GET /categories`
+|
+
+|`POST /categories`
+|`{ name, color }` — color is hex, e.g. `#6366f1`
+
+|`PATCH /categories/:id`
+|`{ name, color }`
+
+|`DELETE /categories/:id`
+|Todos in this category get `category_id = NULL`. 204.
+|===
+
+=== Push Subscriptions
+
+[cols="2,3"]
+|===
+|Endpoint |Notes
+
+|`POST /push/subscribe`
+|`{ endpoint, keys: { p256dh, auth } }` — upserts on `endpoint`
+
+|`DELETE /push/subscribe`
+|`{ endpoint }`
+|===
+
+All errors return `{ "error": "...", "code": "MACHINE_CODE" }`.
+
+== Production Deployment
+
+[source,bash]
+----
+DOMAIN=todo.example.com docker compose up -d
+----
+
+Before going public:
+
+. Remove the `http://` prefix from `frontend/Caddyfile` — this prefix disables Caddy's auto-HTTPS.
+. Expose ports 80, 443, and 443/UDP (HTTP/3) instead of 8080.
+. Verify `ENVIRONMENT=production` so the backend uses JSON logging and ignores `.env`.
+
+Caddy handles Let's Encrypt automatically once the domain resolves to your server.
+
+== Regenerating sqlc Queries
+
+[source,bash]
+----
+cd backend/internal/db && sqlc generate
+----
+
+Commit the generated files.

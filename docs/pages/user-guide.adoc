@@ -1,0 +1,97 @@
+ifndef::imagesdir[]
+:imagesdir: ../images
+endif::[]
+
+= User Guide
+
+== Creating Tasks
+
+Press *N* anywhere in the app to open the new task form, or use the Quick Capture bar at the top of any list view (press Enter to create instantly without opening the form).
+
+image::screenshot-task-form.png[New task form]
+
+Form fields: Title (required), Description, Deadline (defaults to today), Reminder, Category, Priority, Time Estimate, Subtasks.
+
+== Task Cards
+
+image::screenshot-task-card.png[Task card with action buttons visible]
+
+Each card shows: title, category badge, due date, priority border, time estimate, and subtask progress. Click the title to open the edit view. If a task has a description, a chevron appears next to the title — click it to expand inline. Hover to reveal action buttons: bell (reminder), pencil (edit), trash (delete).
+
+== Views
+
+image::screenshot-today-view.png[Today view with overdue section open at bottom]
+
+[cols="1,3"]
+|===
+|View |What it shows
+
+|Today
+|Active tasks due today. Overdue tasks appear in a collapsible section at the bottom — they stay visible but don't crowd the list.
+
+|Upcoming
+|Active tasks with a future deadline, grouped by date.
+
+|Overdue
+|Everything past its deadline. Dates show in red. Reschedule, complete, or delete from here.
+
+|Done
+|Completed tasks with total done, done today, and current streak.
+
+|Category
+|Tasks in a single category. Quick Capture here pre-fills the category.
+|===
+
+== Focus Mode
+
+image::screenshot-focus-mode.png[Focus mode showing a single task full-screen]
+
+One task, full screen. No sidebar, no list — just what you're working on right now. Open it from the sidebar at the start of a work session.
+
+Subtasks appear as checkboxes. When you're done, hit *Mark done* to advance to the next task, or *Reschedule to tomorrow* if it's not happening today. The counter (e.g. "1 / 2") shows your position in the queue.
+
+== Snooze vs Reschedule
+
+image::screenshot-snooze-presets.png[Snooze preset pills on a task card]
+
+Both push the deadline to a future date. *Snooze* uses presets (Tomorrow / Weekend / Next week) accessible from the task card. *Reschedule* opens a date picker. Neither changes the task's status — it stays active and reappears in the appropriate view on the new date.
+
+== Reminders
+
+Set a `reminder_at` datetime when creating or editing a task. Both email and browser push notifications fire at that time. The form defaults to one hour from now — clear it if you don't want a reminder.
+
+To receive browser push notifications, allow notifications when prompted on first login.
+
+NOTE: Rotating your VAPID keys (server-side) invalidates all existing push subscriptions. Users will need to log out and back in to re-subscribe.
+
+== Priority and Colour Coding
+
+[cols="1,2"]
+|===
+|Indicator |Meaning
+
+|Red left border
+|High priority
+
+|Yellow left border
+|Medium priority
+
+|Red date
+|Overdue
+
+|Purple
+|Primary actions / active navigation
+|===
+
+== Keyboard Shortcuts
+
+[cols="1,2"]
+|===
+|Key |Action
+
+|N
+|Open new task form
+
+|Escape
+|Close form / clear Quick Capture input
+|===

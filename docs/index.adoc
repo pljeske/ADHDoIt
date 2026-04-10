@@ -1,0 +1,15 @@
+:imagesdir: images
+
+= ADHDoIt
+:toc: left
+:toc-title: Contents
+:toclevels: 2
+:icons: font
+
+ADHD-friendly multi-user todo list. Fast capture, smart views, reminders via email and Web Push — all on a single Postgres + Go + React stack.
+
+include::pages/features.adoc[leveloffset=+1]
+
+include::pages/user-guide.adoc[leveloffset=+1]
+
+include::pages/developer.adoc[leveloffset=+1]
