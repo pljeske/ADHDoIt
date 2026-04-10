@@ -21,6 +21,4 @@ App available at http://localhost:8080.
 
 == Documentation
 
-* link:docs/pages/features.adoc[Features]
-* link:docs/pages/user-guide.adoc[User Guide]
-* link:docs/pages/developer.adoc[Developer Guide]
+link:https://pljeske.github.io/ADHDoIt/[ADHDoIt Docs]
