@@ -3,15 +3,24 @@ ifndef::imagesdir[]
 endif::[]
 
 = ADHDoIt
-:toc: left
-:toc-title: Contents
-:toclevels: 2
 :icons: font
 
 ADHD-friendly multi-user todo list. Fast capture, smart views, reminders via email and Web Push — all on a single Postgres + Go + React stack.
 
-include::docs/pages/features.adoc[leveloffset=+1]
+image::screenshot-today-view.png[Today view]
 
-include::docs/pages/user-guide.adoc[leveloffset=+1]
+== Quick Start
 
-include::docs/pages/developer.adoc[leveloffset=+1]
+[source,bash]
+----
+cp .env.example .env        # fill in JWT_SECRET (min 32 chars) and DB_PASSWORD
+docker compose up
+----
+
+App available at http://localhost:8080.
+
+== Documentation
+
+* link:docs/pages/features.adoc[Features]
+* link:docs/pages/user-guide.adoc[User Guide]
+* link:docs/pages/developer.adoc[Developer Guide]

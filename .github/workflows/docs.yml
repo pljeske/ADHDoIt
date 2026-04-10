@@ -1,0 +1,64 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - README.adoc
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Asciidoctor
+        run: gem install asciidoctor
+
+      - name: Convert AsciiDoc to HTML
+        run: |
+          asciidoctor \
+            --backend html5 \
+            --attribute toc=left \
+            --attribute toclevels=2 \
+            --attribute icons=font \
+            --attribute source-highlighter=highlight.js \
+            --destination-dir _site \
+            docs/index.adoc
+
+      - name: Copy images
+        run: |
+          if [ -d docs/images ]; then
+            cp -r docs/images _site/images
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
