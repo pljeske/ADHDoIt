@@ -21,8 +21,13 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	Name         string    `json:"name"`
 	Timezone     string    `json:"timezone"`
+	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+type AppSettings struct {
+	RegistrationDisabled bool `json:"registration_disabled"`
 }
 
 type RefreshToken struct {

@@ -47,6 +47,12 @@ type authResponse struct {
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	// Check if registration is disabled
+	if val, err := h.q.GetAppSetting(r.Context(), "registration_disabled"); err == nil && val == "true" {
+		respondError(w, http.StatusForbidden, "registration is disabled", "REGISTRATION_DISABLED")
+		return
+	}
+
 	var req registerRequest
 	if err := decodeJSON(r, &req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid json", "BAD_REQUEST")
@@ -176,6 +182,7 @@ func (h *AuthHandler) issueTokens(r *http.Request, user *db.User) (accessToken, 
 	claims := jwt.MapClaims{
 		"user_id": user.ID.String(),
 		"email":   user.Email,
+		"role":    user.Role,
 		"exp":     time.Now().Add(h.cfg.JWTAccessTTL).Unix(),
 		"iat":     time.Now().Unix(),
 	}

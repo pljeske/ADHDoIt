@@ -41,6 +41,7 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 
 			userIDStr, _ := claims["user_id"].(string)
 			email, _ := claims["email"].(string)
+			role, _ := claims["role"].(string)
 			userID, err := uuid.Parse(userIDStr)
 			if err != nil {
 				writeUnauthorized(w)
@@ -49,6 +50,7 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 
 			ctx := context.WithValue(r.Context(), model.ContextKeyUserID, userID)
 			ctx = context.WithValue(ctx, model.ContextKeyUserEmail, email)
+			ctx = context.WithValue(ctx, model.ContextKeyUserRole, role)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

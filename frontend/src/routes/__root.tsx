@@ -1,6 +1,6 @@
 import { createRootRoute, Outlet, useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
-import { useAuthStore, getRefreshToken, setRefreshToken } from '@/store/auth'
+import { useAuthStore, getRefreshToken, setRefreshToken, parseRoleFromToken } from '@/store/auth'
 import { refreshTokens } from '@/api/auth'
 import { registerPushSubscription } from '@/lib/sw'
 
@@ -11,7 +11,7 @@ export const rootRoute = createRootRoute({
 const PUBLIC_PATHS = ['/login', '/register']
 
 function RootComponent() {
-  const { setAccessToken, setAuthReady, logout, isAuthReady } = useAuthStore()
+  const { setAccessToken, setRole, setAuthReady, logout, isAuthReady } = useAuthStore()
   const router = useRouter()
 
   useEffect(() => {
@@ -22,6 +22,7 @@ function RootComponent() {
       refreshTokens(rt)
         .then((data) => {
           setAccessToken(data.access_token)
+          setRole(parseRoleFromToken(data.access_token))
           setRefreshToken(data.refresh_token)
           registerPushSubscription().catch(console.warn)
         })

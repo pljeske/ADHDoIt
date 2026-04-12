@@ -83,6 +83,29 @@ NOTE: Rotating your VAPID keys (server-side) invalidates all existing push subsc
 |Primary actions / active navigation
 |===
 
+== Admin Dashboard
+
+Users with the *admin* role have access to an Admin section in the sidebar.
+
+=== Users
+
+The user table lists every registered account with their name, email, and current role. From here an admin can:
+
+* *Change role* — click the role badge next to a user to switch between `user` and `admin`. You cannot change your own role.
+* *Delete user* — removes the account and all its data permanently. You cannot delete your own account.
+
+=== Settings
+
+[cols="1,3"]
+|===
+|Setting |Effect
+
+|Disable sign-up
+|Prevents new accounts from being created. Existing users and admins are unaffected. Toggle it back off to re-enable registration.
+|===
+
+NOTE: The first admin must be set directly in the database: `UPDATE users SET role = 'admin' WHERE email = 'you@example.com';`
+
 == Keyboard Shortcuts
 
 [cols="1,2"]

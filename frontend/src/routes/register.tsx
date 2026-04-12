@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { register as registerUser } from '@/api/auth'
-import { useAuthStore, setRefreshToken } from '@/store/auth'
+import { useAuthStore, setRefreshToken, parseRoleFromToken } from '@/store/auth'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -28,7 +28,7 @@ type FormData = z.infer<typeof schema>
 
 function RegisterPage() {
   const router = useRouter()
-  const { setAccessToken } = useAuthStore()
+  const { setAccessToken, setRole } = useAuthStore()
   const [error, setError] = useState('')
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
@@ -43,6 +43,7 @@ function RegisterPage() {
     try {
       const res = await registerUser(data)
       setAccessToken(res.access_token)
+      setRole(parseRoleFromToken(res.access_token))
       setRefreshToken(res.refresh_token)
       router.navigate({ to: '/app/today' })
     } catch (e: unknown) {

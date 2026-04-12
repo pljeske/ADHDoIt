@@ -23,6 +23,12 @@ endif::[]
 * *Web Push* — browser push notifications using VAPID; no third-party service
 * Both channels fire from the same reminder job; failures on one channel do not cancel the other
 
+== Admin
+
+* *User management* — list all registered users, change roles (user ↔ admin), and delete accounts from a dedicated dashboard
+* *Disable sign-up* — toggle registration on/off at runtime without restarting the server; the setting persists in the database
+* *Self-protection* — admins cannot demote or delete their own account
+
 == UX Details
 
 * *Today progress counter* — shows "X tasks" that becomes "X / Y done" as you complete work

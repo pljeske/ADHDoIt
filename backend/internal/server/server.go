@@ -46,6 +46,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 	categoryHandler := handler.NewCategoryHandler(queries)
 	todoHandler := handler.NewTodoHandler(queries, pool, riverClient, cfg)
 	pushHandler := handler.NewPushHandler(queries)
+	adminHandler := handler.NewAdminHandler(queries)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public auth routes
@@ -75,6 +76,16 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 
 			r.Post("/push/subscribe", pushHandler.Subscribe)
 			r.Delete("/push/subscribe", pushHandler.Unsubscribe)
+
+			// Admin-only routes
+			r.Group(func(r chi.Router) {
+				r.Use(mw.AdminOnly)
+				r.Get("/admin/users", adminHandler.ListUsers)
+				r.Patch("/admin/users/{id}/role", adminHandler.UpdateUserRole)
+				r.Delete("/admin/users/{id}", adminHandler.DeleteUser)
+				r.Get("/admin/settings", adminHandler.GetSettings)
+				r.Patch("/admin/settings", adminHandler.UpdateSettings)
+			})
 		})
 	})
 

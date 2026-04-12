@@ -8,6 +8,7 @@ import {
   LogOut,
   Pencil,
   Plus,
+  Shield,
   Sparkles,
   Target,
   Trash2,
@@ -48,7 +49,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const deleteCategory = useDeleteCategory()
   const { data: overdueTodos } = useTodos({ view: 'overdue' })
   const overdueCount = overdueTodos?.length ?? 0
-  const { logout: storeLogout } = useAuthStore()
+  const { logout: storeLogout, role } = useAuthStore()
   const router = useRouter()
 
   async function handleLogout() {
@@ -338,6 +339,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             ))}
           </div>
         </nav>
+
+        {/* Admin */}
+        {role === 'admin' && (
+          <div className="px-1">
+            <Link
+              to="/app/admin"
+              className={cn(
+                'flex items-center gap-2.5 px-3 py-2 rounded-xl',
+                'text-[13px] font-medium text-white/55',
+                'transition-all duration-250 ease-[cubic-bezier(0.32,0.72,0,1)]',
+                'hover:bg-white/[0.06] hover:text-white/85',
+                '[&.active]:bg-violet-500/10 [&.active]:text-violet-300 [&.active]:shadow-[inset_0_1px_0_rgba(139,92,246,0.12)]',
+              )}
+            >
+              <Shield className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.5} />
+              Admin
+            </Link>
+          </div>
+        )}
 
         {/* Logout */}
         <div className="px-1 pb-1">
