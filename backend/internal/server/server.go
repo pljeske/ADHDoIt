@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"adhdoit/internal/config"
 	"adhdoit/internal/db"
 	"adhdoit/internal/handler"
 	mw "adhdoit/internal/middleware"
 	"adhdoit/internal/worker"
+
+	"golang.org/x/time/rate"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -42,6 +45,10 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30_000_000_000)) // 30s
 
+	// Global rate limiter: 60 req/min per IP, burst 20.
+	globalLimiter := mw.NewRateLimiter(rate.Every(time.Second), 20)
+	r.Use(globalLimiter.Middleware)
+
 	authHandler := handler.NewAuthHandler(queries, cfg)
 	categoryHandler := handler.NewCategoryHandler(queries)
 	todoHandler := handler.NewTodoHandler(queries, pool, riverClient, cfg)
@@ -49,10 +56,19 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 	adminHandler := handler.NewAdminHandler(queries)
 
 	r.Route("/api/v1", func(r chi.Router) {
-		// Public auth routes
-		r.Post("/auth/register", authHandler.Register)
-		r.Post("/auth/login", authHandler.Login)
-		r.Post("/auth/refresh", authHandler.Refresh)
+		// Public auth routes — each has its own tight rate limit in addition to
+		// the global limiter already applied above.
+		//
+		// register: 3 attempts/hour per IP (burst 3) — bot/spam signup guard
+		// login:    10 attempts/5 min per IP (burst 10) — brute-force guard
+		// refresh:  30 attempts/5 min per IP (burst 15) — token-rotation guard
+		registerLimiter := mw.NewRateLimiter(rate.Every(20*time.Minute), 3)
+		loginLimiter := mw.NewRateLimiter(rate.Every(30*time.Second), 10)
+		refreshLimiter := mw.NewRateLimiter(rate.Every(10*time.Second), 15)
+
+		r.With(registerLimiter.Middleware).Post("/auth/register", authHandler.Register)
+		r.With(loginLimiter.Middleware).Post("/auth/login", authHandler.Login)
+		r.With(refreshLimiter.Middleware).Post("/auth/refresh", authHandler.Refresh)
 
 		// Authenticated routes
 		r.Group(func(r chi.Router) {

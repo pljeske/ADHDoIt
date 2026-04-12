@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 )
 
@@ -15,6 +16,9 @@ func respondError(w http.ResponseWriter, status int, msg, code string) {
 	respondJSON(w, status, map[string]string{"error": msg, "code": code})
 }
 
+// maxBodyBytes caps request bodies at 1 MiB to prevent memory exhaustion.
+const maxBodyBytes = 1 << 20
+
 func decodeJSON(r *http.Request, v any) error {
-	return json.NewDecoder(r.Body).Decode(v)
+	return json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes)).Decode(v)
 }
