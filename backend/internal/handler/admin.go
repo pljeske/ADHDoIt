@@ -11,7 +11,12 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type appSettingsResponse struct {
+	RegistrationDisabled bool `json:"registration_disabled"`
+}
 
 type AdminHandler struct {
 	q *db.Queries
@@ -67,7 +72,10 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.q.UpdateUserRole(r.Context(), targetID, req.Role)
+	user, err := h.q.UpdateUserRole(r.Context(), &db.UpdateUserRoleParams{
+		ID:   pgtype.UUID{Bytes: targetID, Valid: true},
+		Role: req.Role,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "user not found", "NOT_FOUND")
@@ -99,7 +107,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.q.DeleteUser(r.Context(), targetID); err != nil {
+	if err := h.q.DeleteUser(r.Context(), pgtype.UUID{Bytes: targetID, Valid: true}); err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}
@@ -113,7 +121,7 @@ func (h *AdminHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}
-	respondJSON(w, http.StatusOK, db.AppSettings{RegistrationDisabled: val == "true"})
+	respondJSON(w, http.StatusOK, appSettingsResponse{RegistrationDisabled: val == "true"})
 }
 
 type updateSettingsRequest struct {
@@ -132,9 +140,9 @@ func (h *AdminHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if req.RegistrationDisabled {
 		val = "true"
 	}
-	if err := h.q.SetAppSetting(r.Context(), "registration_disabled", val); err != nil {
+	if err := h.q.SetAppSetting(r.Context(), &db.SetAppSettingParams{Key: "registration_disabled", Value: val}); err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}
-	respondJSON(w, http.StatusOK, db.AppSettings{RegistrationDisabled: req.RegistrationDisabled})
+	respondJSON(w, http.StatusOK, appSettingsResponse{RegistrationDisabled: req.RegistrationDisabled})
 }

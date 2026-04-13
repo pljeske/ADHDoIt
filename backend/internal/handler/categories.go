@@ -29,7 +29,7 @@ type categoryRequest struct {
 
 func (h *CategoryHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID, _ := mw.UserIDFromContext(r.Context())
-	cats, err := h.q.ListCategories(r.Context(), userID)
+	cats, err := h.q.ListCategories(r.Context(), toPgtypeUUID(userID))
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
@@ -52,7 +52,11 @@ func (h *CategoryHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cat, err := h.q.CreateCategory(r.Context(), userID, req.Name, req.Color)
+	cat, err := h.q.CreateCategory(r.Context(), &db.CreateCategoryParams{
+		UserID: toPgtypeUUID(userID),
+		Name:   req.Name,
+		Color:  req.Color,
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
@@ -79,7 +83,12 @@ func (h *CategoryHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cat, err := h.q.UpdateCategory(r.Context(), id, userID, req.Name, req.Color)
+	cat, err := h.q.UpdateCategory(r.Context(), &db.UpdateCategoryParams{
+		ID:     toPgtypeUUID(id),
+		UserID: toPgtypeUUID(userID),
+		Name:   req.Name,
+		Color:  req.Color,
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "category not found", "NOT_FOUND")
@@ -100,7 +109,10 @@ func (h *CategoryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.q.DeleteCategory(r.Context(), id, userID); err != nil {
+	if err := h.q.DeleteCategory(r.Context(), &db.DeleteCategoryParams{
+		ID:     toPgtypeUUID(id),
+		UserID: toPgtypeUUID(userID),
+	}); err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}

@@ -71,7 +71,7 @@ func main() {
 	}
 	slog.Info("migrations complete")
 
-	queries := db.NewWithPool(pool)
+	queries := db.New(pool)
 
 	riverClient, err := server.SetupRiver(ctx, pool, queries, cfg)
 	if err != nil {

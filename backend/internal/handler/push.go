@@ -38,7 +38,12 @@ func (h *PushHandler) Subscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sub, err := h.q.UpsertPushSubscription(r.Context(), userID, req.Endpoint, req.Keys.P256dh, req.Keys.Auth)
+	sub, err := h.q.UpsertPushSubscription(r.Context(), &db.UpsertPushSubscriptionParams{
+		UserID:   toPgtypeUUID(userID),
+		Endpoint: req.Endpoint,
+		P256dh:   req.Keys.P256dh,
+		Auth:     req.Keys.Auth,
+	})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
@@ -56,7 +61,10 @@ func (h *PushHandler) Unsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.q.DeletePushSubscription(r.Context(), req.Endpoint, userID); err != nil {
+	if err := h.q.DeletePushSubscription(r.Context(), &db.DeletePushSubscriptionParams{
+		Endpoint: req.Endpoint,
+		UserID:   toPgtypeUUID(userID),
+	}); err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}

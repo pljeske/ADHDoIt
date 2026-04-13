@@ -41,30 +41,33 @@ type TodoResponse struct {
 
 func toTodoResponse(t *db.Todo) TodoResponse {
 	r := TodoResponse{
-		ID:        t.ID,
-		UserID:    t.UserID,
+		ID:        uuid.UUID(t.ID.Bytes),
+		UserID:    uuid.UUID(t.UserID.Bytes),
 		Title:     t.Title,
 		Priority:  t.Priority,
 		Status:    t.Status,
-		CreatedAt: t.CreatedAt,
-		UpdatedAt: t.UpdatedAt,
+		CreatedAt: t.CreatedAt.Time,
+		UpdatedAt: t.UpdatedAt.Time,
 		Subtasks:  []SubtaskItem{},
 	}
 
 	if t.CategoryID.Valid {
-		r.CategoryID = new(uuid.UUID(t.CategoryID.Bytes))
+		catID := uuid.UUID(t.CategoryID.Bytes)
+		r.CategoryID = &catID
 	}
 	if t.Description.Valid {
 		r.Description = &t.Description.String
 	}
 	if t.Deadline.Valid {
-		r.Deadline = new(t.Deadline.Time.Format("2006-01-02"))
+		s := t.Deadline.Time.Format("2006-01-02")
+		r.Deadline = &s
 	}
 	if t.ReminderAt.Valid {
 		r.ReminderAt = &t.ReminderAt.Time
 	}
 	if t.SnoozeUntil.Valid {
-		r.SnoozeUntil = new(t.SnoozeUntil.Time.Format("2006-01-02"))
+		s := t.SnoozeUntil.Time.Format("2006-01-02")
+		r.SnoozeUntil = &s
 	}
 	if t.DoneAt.Valid {
 		r.DoneAt = &t.DoneAt.Time

@@ -15,6 +15,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -74,7 +75,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		isFirst = true
 	}
 
-	user, err := h.q.CreateUser(r.Context(), req.Email, string(hash), req.Name, req.Timezone)
+	user, err := h.q.CreateUser(r.Context(), &db.CreateUserParams{
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		Name:         req.Name,
+		Timezone:     req.Timezone,
+	})
 	if err != nil {
 		respondError(w, http.StatusConflict, "email already in use", "CONFLICT")
 		return
@@ -210,7 +216,11 @@ func (h *AuthHandler) issueTokens(r *http.Request, user *db.User) (accessToken, 
 	refreshTokenRaw = hex.EncodeToString(rawBytes)
 	hash := hashToken(refreshTokenRaw)
 	expiresAt := time.Now().Add(h.cfg.JWTRefreshTTL)
-	_, err = h.q.CreateRefreshToken(r.Context(), user.ID, hash, expiresAt)
+	_, err = h.q.CreateRefreshToken(r.Context(), &db.CreateRefreshTokenParams{
+		UserID:    user.ID,
+		TokenHash: hash,
+		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
+	})
 	return
 }
 

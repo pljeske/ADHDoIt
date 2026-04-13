@@ -12,21 +12,23 @@ import (
 )
 
 const createTodo = `-- name: CreateTodo :one
-INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks, recurrence_rule, recurrence_end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date
 `
 
 type CreateTodoParams struct {
-	UserID          pgtype.UUID
-	CategoryID      pgtype.UUID
-	Title           string
-	Description     pgtype.Text
-	Deadline        pgtype.Date
-	ReminderAt      pgtype.Timestamptz
-	Priority        int16
-	DurationMinutes pgtype.Int4
-	Column9         []byte
+	UserID            pgtype.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
 }
 
 func (q *Queries) CreateTodo(ctx context.Context, arg *CreateTodoParams) (*Todo, error) {
@@ -39,7 +41,67 @@ func (q *Queries) CreateTodo(ctx context.Context, arg *CreateTodoParams) (*Todo,
 		arg.ReminderAt,
 		arg.Priority,
 		arg.DurationMinutes,
-		arg.Column9,
+		arg.Subtasks,
+		arg.RecurrenceRule,
+		arg.RecurrenceEndDate,
+	)
+	var i Todo
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CategoryID,
+		&i.Title,
+		&i.Description,
+		&i.Deadline,
+		&i.ReminderAt,
+		&i.ReminderJobID,
+		&i.Priority,
+		&i.Status,
+		&i.SnoozeUntil,
+		&i.DoneAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DurationMinutes,
+		&i.Subtasks,
+		&i.RecurrenceRule,
+		&i.RecurrenceEndDate,
+	)
+	return &i, err
+}
+
+const createTodoFromRecurrence = `-- name: CreateTodoFromRecurrence :one
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks, recurrence_rule, recurrence_end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date
+`
+
+type CreateTodoFromRecurrenceParams struct {
+	UserID            pgtype.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
+}
+
+func (q *Queries) CreateTodoFromRecurrence(ctx context.Context, arg *CreateTodoFromRecurrenceParams) (*Todo, error) {
+	row := q.db.QueryRow(ctx, createTodoFromRecurrence,
+		arg.UserID,
+		arg.CategoryID,
+		arg.Title,
+		arg.Description,
+		arg.Deadline,
+		arg.ReminderAt,
+		arg.Priority,
+		arg.DurationMinutes,
+		arg.Subtasks,
+		arg.RecurrenceRule,
+		arg.RecurrenceEndDate,
 	)
 	var i Todo
 	err := row.Scan(
@@ -262,13 +324,13 @@ const listTodosOverdue = `-- name: ListTodosOverdue :many
 SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date FROM todos
 WHERE user_id = $1
   AND status IN ('active', 'snoozed')
-  AND deadline < (CURRENT_DATE AT TIME ZONE $2)::date
+  AND deadline < (CURRENT_DATE AT TIME ZONE ($2::text))::date
 ORDER BY deadline ASC, priority DESC, created_at ASC
 `
 
 type ListTodosOverdueParams struct {
 	UserID   pgtype.UUID
-	Timezone pgtype.Interval
+	Timezone string
 }
 
 func (q *Queries) ListTodosOverdue(ctx context.Context, arg *ListTodosOverdueParams) ([]*Todo, error) {
@@ -314,13 +376,13 @@ const listTodosToday = `-- name: ListTodosToday :many
 SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date FROM todos
 WHERE user_id = $1
   AND status = 'active'
-  AND deadline = (CURRENT_DATE AT TIME ZONE $2)::date
+  AND deadline = (CURRENT_DATE AT TIME ZONE ($2::text))::date
 ORDER BY priority DESC, deadline ASC, created_at ASC
 `
 
 type ListTodosTodayParams struct {
 	UserID   pgtype.UUID
-	Timezone pgtype.Interval
+	Timezone string
 }
 
 func (q *Queries) ListTodosToday(ctx context.Context, arg *ListTodosTodayParams) ([]*Todo, error) {
@@ -366,13 +428,13 @@ const listTodosUpcoming = `-- name: ListTodosUpcoming :many
 SELECT id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date FROM todos
 WHERE user_id = $1
   AND status = 'active'
-  AND deadline > (CURRENT_DATE AT TIME ZONE $2)::date
+  AND deadline > (CURRENT_DATE AT TIME ZONE ($2::text))::date
 ORDER BY deadline ASC, priority DESC, created_at ASC
 `
 
 type ListTodosUpcomingParams struct {
 	UserID   pgtype.UUID
-	Timezone pgtype.Interval
+	Timezone string
 }
 
 func (q *Queries) ListTodosUpcoming(ctx context.Context, arg *ListTodosUpcomingParams) ([]*Todo, error) {
@@ -536,24 +598,28 @@ SET category_id      = $3,
     reminder_job_id  = $8,
     priority         = $9,
     duration_minutes = $10,
-    subtasks         = $11::jsonb,
+    subtasks         = $11,
+    recurrence_rule  = $12,
+    recurrence_end_date = $13,
     updated_at       = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date
 `
 
 type UpdateTodoParams struct {
-	ID              pgtype.UUID
-	UserID          pgtype.UUID
-	CategoryID      pgtype.UUID
-	Title           string
-	Description     pgtype.Text
-	Deadline        pgtype.Date
-	ReminderAt      pgtype.Timestamptz
-	ReminderJobID   pgtype.Int8
-	Priority        int16
-	DurationMinutes pgtype.Int4
-	Column11        []byte
+	ID                pgtype.UUID
+	UserID            pgtype.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	ReminderJobID     pgtype.Int8
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
 }
 
 func (q *Queries) UpdateTodo(ctx context.Context, arg *UpdateTodoParams) (*Todo, error) {
@@ -568,7 +634,9 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg *UpdateTodoParams) (*Todo,
 		arg.ReminderJobID,
 		arg.Priority,
 		arg.DurationMinutes,
-		arg.Column11,
+		arg.Subtasks,
+		arg.RecurrenceRule,
+		arg.RecurrenceEndDate,
 	)
 	var i Todo
 	err := row.Scan(

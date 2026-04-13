@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/riverqueue/river"
 )
 
@@ -32,16 +33,19 @@ func NewReminderWorker(q *db.Queries, cfg *config.Config) *ReminderWorker {
 }
 
 func (w *ReminderWorker) Work(ctx context.Context, job *river.Job[ReminderArgs]) error {
-	todoID, err := uuid.Parse(job.Args.TodoID)
+	todoIDRaw, err := uuid.Parse(job.Args.TodoID)
 	if err != nil {
 		return nil // bad ID, discard
 	}
-	userID, err := uuid.Parse(job.Args.UserID)
+	userIDRaw, err := uuid.Parse(job.Args.UserID)
 	if err != nil {
 		return nil
 	}
 
-	todo, err := w.q.GetTodo(ctx, todoID, userID)
+	todoID := pgtype.UUID{Bytes: todoIDRaw, Valid: true}
+	userID := pgtype.UUID{Bytes: userIDRaw, Valid: true}
+
+	todo, err := w.q.GetTodo(ctx, &db.GetTodoParams{ID: todoID, UserID: userID})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil // todo deleted, skip

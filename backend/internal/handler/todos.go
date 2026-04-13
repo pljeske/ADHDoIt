@@ -62,7 +62,9 @@ type updateTodoRequest struct {
 
 func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
 	userID, _ := mw.UserIDFromContext(r.Context())
-	user, err := h.q.GetUserByID(r.Context(), userID)
+	uid := toPgtypeUUID(userID)
+
+	user, err := h.q.GetUserByID(r.Context(), uid)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
@@ -77,13 +79,13 @@ func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
 	var todos []*db.Todo
 	switch view {
 	case "today":
-		todos, err = h.q.ListTodosToday(r.Context(), userID, user.Timezone)
+		todos, err = h.q.ListTodosToday(r.Context(), &db.ListTodosTodayParams{UserID: uid, Timezone: user.Timezone})
 	case "upcoming":
-		todos, err = h.q.ListTodosUpcoming(r.Context(), userID, user.Timezone)
+		todos, err = h.q.ListTodosUpcoming(r.Context(), &db.ListTodosUpcomingParams{UserID: uid, Timezone: user.Timezone})
 	case "overdue":
-		todos, err = h.q.ListTodosOverdue(r.Context(), userID, user.Timezone)
+		todos, err = h.q.ListTodosOverdue(r.Context(), &db.ListTodosOverdueParams{UserID: uid, Timezone: user.Timezone})
 	case "done":
-		todos, err = h.q.ListTodosDone(r.Context(), userID)
+		todos, err = h.q.ListTodosDone(r.Context(), uid)
 	case "category":
 		if catIDStr == "" {
 			respondError(w, http.StatusBadRequest, "category_id required", "BAD_REQUEST")
@@ -94,7 +96,10 @@ func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, "invalid category_id", "BAD_REQUEST")
 			return
 		}
-		todos, err = h.q.ListTodosByCategory(r.Context(), userID, catID)
+		todos, err = h.q.ListTodosByCategory(r.Context(), &db.ListTodosByCategoryParams{
+			UserID:     uid,
+			CategoryID: toPgtypeUUID(catID),
+		})
 	default:
 		respondError(w, http.StatusBadRequest, "invalid view", "BAD_REQUEST")
 		return
@@ -109,7 +114,9 @@ func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 	userID, _ := mw.UserIDFromContext(r.Context())
-	user, err := h.q.GetUserByID(r.Context(), userID)
+	uid := toPgtypeUUID(userID)
+
+	user, err := h.q.GetUserByID(r.Context(), uid)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
@@ -126,7 +133,7 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := &db.CreateTodoParams{
-		UserID:   userID,
+		UserID:   uid,
 		Title:    req.Title,
 		Priority: 0,
 	}
@@ -137,7 +144,7 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.CategoryID != nil {
 		catID, err := uuid.Parse(*req.CategoryID)
 		if err == nil {
-			params.CategoryID = pgtype.UUID{Bytes: catID, Valid: true}
+			params.CategoryID = toPgtypeUUID(catID)
 		}
 	}
 	if req.Priority != nil {
@@ -208,7 +215,7 @@ func (h *TodoHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	todo, err := h.q.GetTodo(r.Context(), id, userID)
+	todo, err := h.q.GetTodo(r.Context(), &db.GetTodoParams{ID: id, UserID: toPgtypeUUID(userID)})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -228,7 +235,7 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.q.GetTodo(r.Context(), id, userID)
+	existing, err := h.q.GetTodo(r.Context(), &db.GetTodoParams{ID: id, UserID: toPgtypeUUID(userID)})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -272,7 +279,7 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 		} else {
 			catID, parseErr := uuid.Parse(*req.CategoryID)
 			if parseErr == nil {
-				params.CategoryID = pgtype.UUID{Bytes: catID, Valid: true}
+				params.CategoryID = toPgtypeUUID(catID)
 			}
 		}
 	}
@@ -359,20 +366,21 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *TodoHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID, _ := mw.UserIDFromContext(r.Context())
+	uid := toPgtypeUUID(userID)
 	id, err := parseTodoID(r)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid id", "BAD_REQUEST")
 		return
 	}
 
-	existing, err := h.q.GetTodo(r.Context(), id, userID)
+	existing, err := h.q.GetTodo(r.Context(), &db.GetTodoParams{ID: id, UserID: uid})
 	if err == nil && existing.ReminderJobID.Valid && h.river != nil {
 		if _, err := h.river.JobCancel(r.Context(), existing.ReminderJobID.Int64); err != nil {
 			slog.Warn("failed to cancel reminder job on delete", "err", err)
 		}
 	}
 
-	if err := h.q.DeleteTodo(r.Context(), id, userID); err != nil {
+	if err := h.q.DeleteTodo(r.Context(), &db.DeleteTodoParams{ID: id, UserID: uid}); err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}
@@ -405,7 +413,11 @@ func (h *TodoHandler) Snooze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	todo, err := h.q.SnoozeTodo(r.Context(), id, userID, pgtype.Date{Time: t, Valid: true})
+	todo, err := h.q.SnoozeTodo(r.Context(), &db.SnoozeTodoParams{
+		ID:       id,
+		UserID:   toPgtypeUUID(userID),
+		Deadline: pgtype.Date{Time: t, Valid: true},
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -419,6 +431,7 @@ func (h *TodoHandler) Snooze(w http.ResponseWriter, r *http.Request) {
 
 func (h *TodoHandler) Done(w http.ResponseWriter, r *http.Request) {
 	userID, _ := mw.UserIDFromContext(r.Context())
+	uid := toPgtypeUUID(userID)
 	id, err := parseTodoID(r)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid id", "BAD_REQUEST")
@@ -433,7 +446,7 @@ func (h *TodoHandler) Done(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 
 	qtx := db.New(tx)
-	todo, err := qtx.SetTodoDone(r.Context(), id, userID)
+	todo, err := qtx.SetTodoDone(r.Context(), &db.SetTodoDoneParams{ID: id, UserID: uid})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -475,7 +488,7 @@ func (h *TodoHandler) Reopen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	todo, err := h.q.ReopenTodo(r.Context(), id, userID)
+	todo, err := h.q.ReopenTodo(r.Context(), &db.ReopenTodoParams{ID: id, UserID: toPgtypeUUID(userID)})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -531,6 +544,16 @@ func (h *TodoHandler) scheduleReminder(ctx context.Context, todo *db.Todo) {
 	}
 }
 
-func parseTodoID(r *http.Request) (uuid.UUID, error) {
-	return uuid.Parse(chi.URLParam(r, "id"))
+// parseTodoID parses the "id" URL param as a pgtype.UUID.
+func parseTodoID(r *http.Request) (pgtype.UUID, error) {
+	raw, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+	return toPgtypeUUID(raw), nil
+}
+
+// toPgtypeUUID converts a google/uuid.UUID to a pgtype.UUID.
+func toPgtypeUUID(id uuid.UUID) pgtype.UUID {
+	return pgtype.UUID{Bytes: id, Valid: true}
 }

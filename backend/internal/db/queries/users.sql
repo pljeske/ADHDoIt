@@ -17,7 +17,18 @@ RETURNING *;
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
 
+-- name: ListUsers :many
+SELECT * FROM users ORDER BY created_at ASC;
+
 -- name: SetUserRole :one
 UPDATE users SET role = $2, updated_at = NOW()
 WHERE id = $1
 RETURNING *;
+
+-- name: UpdateUserRole :one
+UPDATE users SET role = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
+-- name: DeleteUser :exec
+DELETE FROM users WHERE id = $1;
