@@ -8,8 +8,8 @@ ARG VITE_VAPID_PUBLIC_KEY
 ARG VERSION=0.0.0-local
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
-RUN npm version --no-git-tag-version --allow-same-version "${VERSION#v}"
-RUN npm run build
+RUN npm version --no-git-tag-version --allow-same-version "${VERSION#v}" \
+    && npm run build
 
 FROM caddy:2-alpine
 ARG VERSION=0.0.0-local
@@ -26,16 +26,17 @@ COPY ./Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /app/dist /srv
 COPY --from=builder /app/public/sw.js /srv/sw.js
 
-# Fix ownership and permissions so Caddy runs as a non-root user and is
-# compatible with OpenShift's arbitrary-UID model (assigned UID belongs to GID 0).
-# /data and /config are Caddy's XDG storage dirs (set by the base image via ENV).
-# They need to be group-writable; /srv and /etc/caddy only need group-readable.
-RUN mkdir -p /data/caddy /config/caddy \
+# caddy:2-alpine sets cap_net_bind_service on the binary; drop it since we use
+# port 8080. Binaries with file caps cannot be exec'd when all caps are dropped
+# (Kubernetes default), causing EPERM.
+# 1001:0 — non-root UID, GID 0 for OpenShift arbitrary-UID compatibility.
+RUN apk add --no-cache libcap \
+    && setcap -r /usr/bin/caddy \
+    && apk del libcap \
+    && mkdir -p /data/caddy /config/caddy \
     && chown -R 1001:0 /data /config /srv /etc/caddy \
     && chmod -R g+rwX /data /config \
-    && chmod -R g+rX  /srv /etc/caddy \
-    && chmod g+rX /usr/bin/caddy
+    && chmod -R g+rX  /srv /etc/caddy
 
 EXPOSE 8080
-# 1001:0 = non-root UID, GID 0 (root group) — satisfies OpenShift restricted SCC
 USER 1001:0

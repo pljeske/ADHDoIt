@@ -1,6 +1,5 @@
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
-RUN apk add --no-cache git
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
@@ -8,6 +7,7 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT}" \
+    -trimpath \
     -o /adhdoit-server ./cmd/server
 
 FROM gcr.io/distroless/static-debian12
@@ -21,11 +21,7 @@ LABEL org.opencontainers.image.title="ADHDoIt Backend" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="MIT"
 COPY --from=builder /adhdoit-server /adhdoit-server
-# 65532:0 = distroless "nonroot" UID, GID 0 (root group).
-# GID 0 is required for OpenShift's arbitrary-UID model: the platform assigns a
-# random UID at runtime that belongs to GID 0, so files writable by the root
-# group remain accessible. The backend binary is stateless and writes nothing to
-# disk, so no chown/chmod is needed beyond the USER declaration.
 EXPOSE 8080
+# 65532:0 — distroless nonroot UID, GID 0 for OpenShift arbitrary-UID compatibility
 USER 65532:0
 ENTRYPOINT ["/adhdoit-server"]
