@@ -33,7 +33,8 @@ COPY --from=builder /app/public/sw.js /srv/sw.js
 RUN mkdir -p /data/caddy /config/caddy \
     && chown -R 1001:0 /data /config /srv /etc/caddy \
     && chmod -R g+rwX /data /config \
-    && chmod -R g+rX  /srv /etc/caddy
+    && chmod -R g+rX  /srv /etc/caddy \
+    && chmod g+rX /usr/bin/caddy
 
 EXPOSE 8080
 # 1001:0 = non-root UID, GID 0 (root group) — satisfies OpenShift restricted SCC

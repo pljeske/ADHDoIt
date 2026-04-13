@@ -20,6 +20,7 @@ services:
     image: ghcr.io/pljeske/adhdoit-backend:latest
     build:
       context: ./backend
+    user: 65532:0
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://adhdo:${DB_PASSWORD}@db:5432/adhdo?sslmode=disable
@@ -42,6 +43,7 @@ services:
 
   frontend:
     image: ghcr.io/pljeske/adhdoit-frontend:latest
+    user: 79234:0
     build:
       context: ./frontend
       args:
