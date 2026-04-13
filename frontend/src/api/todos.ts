@@ -23,6 +23,8 @@ export interface Todo {
   updated_at: string
   duration_minutes: number | null
   subtasks: SubtaskItem[]
+  recurrence_rule: string | null     // "daily"|"weekdays"|"weekly"|"monthly"
+  recurrence_end_date: string | null // "YYYY-MM-DD"
 }
 
 export type TodoView = 'today' | 'upcoming' | 'overdue' | 'done' | 'category'
@@ -52,6 +54,8 @@ export interface CreateTodoData {
   reminder_at?: string | null
   duration_minutes?: number | null
   subtasks?: SubtaskItem[]
+  recurrence_rule?: string | null
+  recurrence_end_date?: string | null
 }
 
 export interface UpdateTodoData {
@@ -63,6 +67,8 @@ export interface UpdateTodoData {
   reminder_at?: string | null
   duration_minutes?: number | null
   subtasks?: SubtaskItem[]
+  recurrence_rule?: string | null
+  recurrence_end_date?: string | null
 }
 
 export function useCreateTodo() {

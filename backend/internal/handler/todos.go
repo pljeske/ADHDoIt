@@ -35,25 +35,29 @@ func NewTodoHandler(q *db.Queries, pool *pgxpool.Pool, riverClient *river.Client
 }
 
 type createTodoRequest struct {
-	Title           string        `json:"title" validate:"required,min=1"`
-	Description     *string       `json:"description"`
-	CategoryID      *string       `json:"category_id"`
-	Deadline        *string       `json:"deadline"` // YYYY-MM-DD
-	Priority        *int16        `json:"priority"`
-	ReminderAt      *string       `json:"reminder_at"` // RFC3339
-	DurationMinutes *int32        `json:"duration_minutes"`
-	Subtasks        []SubtaskItem `json:"subtasks"`
+	Title             string        `json:"title" validate:"required,min=1"`
+	Description       *string       `json:"description"`
+	CategoryID        *string       `json:"category_id"`
+	Deadline          *string       `json:"deadline"` // YYYY-MM-DD
+	Priority          *int16        `json:"priority"`
+	ReminderAt        *string       `json:"reminder_at"` // RFC3339
+	DurationMinutes   *int32        `json:"duration_minutes"`
+	Subtasks          []SubtaskItem `json:"subtasks"`
+	RecurrenceRule    *string       `json:"recurrence_rule"`     // "daily"|"weekdays"|"weekly"|"monthly"
+	RecurrenceEndDate *string       `json:"recurrence_end_date"` // YYYY-MM-DD
 }
 
 type updateTodoRequest struct {
-	Title           *string        `json:"title"`
-	Description     *string        `json:"description"`
-	CategoryID      *string        `json:"category_id"`
-	Deadline        *string        `json:"deadline"`
-	Priority        *int16         `json:"priority"`
-	ReminderAt      *string        `json:"reminder_at"`
-	DurationMinutes *int32         `json:"duration_minutes"`
-	Subtasks        *[]SubtaskItem `json:"subtasks"`
+	Title             *string        `json:"title"`
+	Description       *string        `json:"description"`
+	CategoryID        *string        `json:"category_id"`
+	Deadline          *string        `json:"deadline"`
+	Priority          *int16         `json:"priority"`
+	ReminderAt        *string        `json:"reminder_at"`
+	DurationMinutes   *int32         `json:"duration_minutes"`
+	Subtasks          *[]SubtaskItem `json:"subtasks"`
+	RecurrenceRule    *string        `json:"recurrence_rule"`
+	RecurrenceEndDate *string        `json:"recurrence_end_date"`
 }
 
 func (h *TodoHandler) List(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +170,21 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 			params.Subtasks = data
 		}
 	}
+	if req.RecurrenceRule != nil {
+		switch *req.RecurrenceRule {
+		case "daily", "weekdays", "weekly", "monthly":
+			params.RecurrenceRule = pgtype.Text{String: *req.RecurrenceRule, Valid: true}
+		default:
+			respondError(w, http.StatusUnprocessableEntity, "recurrence_rule must be one of: daily, weekdays, weekly, monthly", "VALIDATION_ERROR")
+			return
+		}
+	}
+	if req.RecurrenceEndDate != nil {
+		t, err := time.Parse("2006-01-02", *req.RecurrenceEndDate)
+		if err == nil {
+			params.RecurrenceEndDate = pgtype.Date{Time: t, Valid: true}
+		}
+	}
 
 	todo, err := h.q.CreateTodo(r.Context(), params)
 	if err != nil {
@@ -226,17 +245,19 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := &db.UpdateTodoParams{
-		ID:              existing.ID,
-		UserID:          existing.UserID,
-		CategoryID:      existing.CategoryID,
-		Title:           existing.Title,
-		Description:     existing.Description,
-		Deadline:        existing.Deadline,
-		ReminderAt:      existing.ReminderAt,
-		ReminderJobID:   existing.ReminderJobID,
-		Priority:        existing.Priority,
-		DurationMinutes: existing.DurationMinutes,
-		Subtasks:        existing.Subtasks,
+		ID:                existing.ID,
+		UserID:            existing.UserID,
+		CategoryID:        existing.CategoryID,
+		Title:             existing.Title,
+		Description:       existing.Description,
+		Deadline:          existing.Deadline,
+		ReminderAt:        existing.ReminderAt,
+		ReminderJobID:     existing.ReminderJobID,
+		Priority:          existing.Priority,
+		DurationMinutes:   existing.DurationMinutes,
+		Subtasks:          existing.Subtasks,
+		RecurrenceRule:    existing.RecurrenceRule,
+		RecurrenceEndDate: existing.RecurrenceEndDate,
 	}
 
 	if req.Title != nil {
@@ -275,6 +296,29 @@ func (h *TodoHandler) Update(w http.ResponseWriter, r *http.Request) {
 	if req.Subtasks != nil {
 		if data, err := json.Marshal(*req.Subtasks); err == nil {
 			params.Subtasks = data
+		}
+	}
+	if req.RecurrenceRule != nil {
+		if *req.RecurrenceRule == "" {
+			params.RecurrenceRule = pgtype.Text{}
+		} else {
+			switch *req.RecurrenceRule {
+			case "daily", "weekdays", "weekly", "monthly":
+				params.RecurrenceRule = pgtype.Text{String: *req.RecurrenceRule, Valid: true}
+			default:
+				respondError(w, http.StatusUnprocessableEntity, "recurrence_rule must be one of: daily, weekdays, weekly, monthly", "VALIDATION_ERROR")
+				return
+			}
+		}
+	}
+	if req.RecurrenceEndDate != nil {
+		if *req.RecurrenceEndDate == "" {
+			params.RecurrenceEndDate = pgtype.Date{}
+		} else {
+			t, err := time.Parse("2006-01-02", *req.RecurrenceEndDate)
+			if err == nil {
+				params.RecurrenceEndDate = pgtype.Date{Time: t, Valid: true}
+			}
 		}
 	}
 
@@ -381,7 +425,15 @@ func (h *TodoHandler) Done(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	todo, err := h.q.SetTodoDone(r.Context(), id, userID)
+	tx, err := h.pool.Begin(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
+		return
+	}
+	defer tx.Rollback(r.Context())
+
+	qtx := db.New(tx)
+	todo, err := qtx.SetTodoDone(r.Context(), id, userID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			respondError(w, http.StatusNotFound, "todo not found", "NOT_FOUND")
@@ -390,6 +442,28 @@ func (h *TodoHandler) Done(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
 		return
 	}
+
+	var spawnedTodo *db.Todo
+	if todo.RecurrenceRule.Valid {
+		nextDeadline := computeNextDeadline(todo.Deadline, todo.RecurrenceRule.String)
+		if !isPastEndDate(nextDeadline, todo.RecurrenceEndDate) {
+			spawnedTodo, err = spawnRecurringTodo(r.Context(), qtx, todo, nextDeadline)
+			if err != nil {
+				slog.Warn("failed to spawn recurring todo", "todo_id", id, "err", err)
+				spawnedTodo = nil
+			}
+		}
+	}
+
+	if err := tx.Commit(r.Context()); err != nil {
+		respondError(w, http.StatusInternalServerError, "internal error", "INTERNAL")
+		return
+	}
+
+	if spawnedTodo != nil && spawnedTodo.ReminderAt.Valid && h.river != nil {
+		h.scheduleReminder(r.Context(), spawnedTodo)
+	}
+
 	respondJSON(w, http.StatusOK, toTodoResponse(todo))
 }
 
@@ -438,17 +512,19 @@ func (h *TodoHandler) scheduleReminder(ctx context.Context, todo *db.Todo) {
 
 	// Update job ID on the todo
 	updateParams := &db.UpdateTodoParams{
-		ID:              todo.ID,
-		UserID:          todo.UserID,
-		CategoryID:      todo.CategoryID,
-		Title:           todo.Title,
-		Description:     todo.Description,
-		Deadline:        todo.Deadline,
-		ReminderAt:      todo.ReminderAt,
-		ReminderJobID:   pgtype.Int8{Int64: res.Job.ID, Valid: true},
-		Priority:        todo.Priority,
-		DurationMinutes: todo.DurationMinutes,
-		Subtasks:        todo.Subtasks,
+		ID:                todo.ID,
+		UserID:            todo.UserID,
+		CategoryID:        todo.CategoryID,
+		Title:             todo.Title,
+		Description:       todo.Description,
+		Deadline:          todo.Deadline,
+		ReminderAt:        todo.ReminderAt,
+		ReminderJobID:     pgtype.Int8{Int64: res.Job.ID, Valid: true},
+		Priority:          todo.Priority,
+		DurationMinutes:   todo.DurationMinutes,
+		Subtasks:          todo.Subtasks,
+		RecurrenceRule:    todo.RecurrenceRule,
+		RecurrenceEndDate: todo.RecurrenceEndDate,
 	}
 	if _, err := h.q.UpdateTodo(ctx, updateParams); err != nil {
 		slog.Warn("failed to store reminder job id", "err", err)

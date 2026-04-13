@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Bell, Check, ChevronDown, Clock, Pencil, Plus, Trash2, RotateCcw, AlarmClock } from 'lucide-react'
+import { Bell, Check, ChevronDown, Clock, Pencil, Repeat, Trash2, RotateCcw, AlarmClock } from 'lucide-react'
 import { format } from 'date-fns'
 import { type Todo, type SubtaskItem, useDeleteTodo, useDoneTodo, useReopenTodo, useSnoozeTodo, useUpdateTodo } from '@/api/todos'
 import { CategoryBadge } from './CategoryBadge'
@@ -190,6 +190,13 @@ export function TodoItem({ todo, onEdit, showSnooze = false, index = 0 }: TodoIt
 
             {todo.reminder_at && (
               <Bell className="h-2.5 w-2.5 text-white/40" strokeWidth={1.5} />
+            )}
+
+            {todo.recurrence_rule && (
+              <span className="inline-flex items-center gap-1 text-[12px] font-medium text-violet-400/60">
+                <Repeat className="h-2.5 w-2.5" strokeWidth={1.5} />
+                {todo.recurrence_rule === 'weekdays' ? 'Weekdays' : todo.recurrence_rule.charAt(0).toUpperCase() + todo.recurrence_rule.slice(1)}
+              </span>
             )}
 
             {subtaskTotal > 0 && (

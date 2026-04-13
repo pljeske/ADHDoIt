@@ -7,23 +7,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const allTodoCols = `id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks`
+const allTodoCols = `id, user_id, category_id, title, description, deadline, reminder_at, reminder_job_id, priority, status, snooze_until, done_at, created_at, updated_at, duration_minutes, subtasks, recurrence_rule, recurrence_end_date`
 
 const createTodo = `
-INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority, duration_minutes, subtasks, recurrence_rule, recurrence_end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
 RETURNING ` + allTodoCols
 
 type CreateTodoParams struct {
-	UserID          uuid.UUID
-	CategoryID      pgtype.UUID
-	Title           string
-	Description     pgtype.Text
-	Deadline        pgtype.Date
-	ReminderAt      pgtype.Timestamptz
-	Priority        int16
-	DurationMinutes pgtype.Int4
-	Subtasks        []byte
+	UserID            uuid.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
 }
 
 func (q *Queries) CreateTodo(ctx context.Context, p *CreateTodoParams) (*Todo, error) {
@@ -33,7 +35,39 @@ func (q *Queries) CreateTodo(ctx context.Context, p *CreateTodoParams) (*Todo, e
 	}
 	row := q.db.QueryRow(ctx, createTodo,
 		p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline, p.ReminderAt, p.Priority,
-		p.DurationMinutes, subtasks,
+		p.DurationMinutes, subtasks, p.RecurrenceRule, p.RecurrenceEndDate,
+	)
+	return scanTodo(row)
+}
+
+const createTodoFromRecurrence = `
+INSERT INTO todos (user_id, category_id, title, description, deadline, reminder_at, priority,
+                   duration_minutes, subtasks, recurrence_rule, recurrence_end_date)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11)
+RETURNING ` + allTodoCols
+
+type CreateTodoFromRecurrenceParams struct {
+	UserID            uuid.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
+}
+
+func (q *Queries) CreateTodoFromRecurrence(ctx context.Context, p *CreateTodoFromRecurrenceParams) (*Todo, error) {
+	subtasks := p.Subtasks
+	if len(subtasks) == 0 {
+		subtasks = []byte("[]")
+	}
+	row := q.db.QueryRow(ctx, createTodoFromRecurrence,
+		p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline, p.ReminderAt, p.Priority,
+		p.DurationMinutes, subtasks, p.RecurrenceRule, p.RecurrenceEndDate,
 	)
 	return scanTodo(row)
 }
@@ -50,31 +84,35 @@ func (q *Queries) GetTodo(ctx context.Context, id, userID uuid.UUID) (*Todo, err
 
 const updateTodo = `
 UPDATE todos
-SET category_id      = $3,
-    title            = $4,
-    description      = $5,
-    deadline         = $6,
-    reminder_at      = $7,
-    reminder_job_id  = $8,
-    priority         = $9,
-    duration_minutes = $10,
-    subtasks         = $11::jsonb,
-    updated_at       = NOW()
+SET category_id        = $3,
+    title              = $4,
+    description        = $5,
+    deadline           = $6,
+    reminder_at        = $7,
+    reminder_job_id    = $8,
+    priority           = $9,
+    duration_minutes   = $10,
+    subtasks           = $11::jsonb,
+    recurrence_rule    = $12,
+    recurrence_end_date = $13,
+    updated_at         = NOW()
 WHERE id = $1 AND user_id = $2
 RETURNING ` + allTodoCols
 
 type UpdateTodoParams struct {
-	ID              uuid.UUID
-	UserID          uuid.UUID
-	CategoryID      pgtype.UUID
-	Title           string
-	Description     pgtype.Text
-	Deadline        pgtype.Date
-	ReminderAt      pgtype.Timestamptz
-	ReminderJobID   pgtype.Int8
-	Priority        int16
-	DurationMinutes pgtype.Int4
-	Subtasks        []byte
+	ID                uuid.UUID
+	UserID            uuid.UUID
+	CategoryID        pgtype.UUID
+	Title             string
+	Description       pgtype.Text
+	Deadline          pgtype.Date
+	ReminderAt        pgtype.Timestamptz
+	ReminderJobID     pgtype.Int8
+	Priority          int16
+	DurationMinutes   pgtype.Int4
+	Subtasks          []byte
+	RecurrenceRule    pgtype.Text
+	RecurrenceEndDate pgtype.Date
 }
 
 func (q *Queries) UpdateTodo(ctx context.Context, p *UpdateTodoParams) (*Todo, error) {
@@ -85,6 +123,7 @@ func (q *Queries) UpdateTodo(ctx context.Context, p *UpdateTodoParams) (*Todo, e
 	row := q.db.QueryRow(ctx, updateTodo,
 		p.ID, p.UserID, p.CategoryID, p.Title, p.Description, p.Deadline,
 		p.ReminderAt, p.ReminderJobID, p.Priority, p.DurationMinutes, subtasks,
+		p.RecurrenceRule, p.RecurrenceEndDate,
 	)
 	return scanTodo(row)
 }
@@ -264,7 +303,7 @@ func scanTodo(row interface{ Scan(...any) error }) (*Todo, error) {
 		&t.ID, &t.UserID, &t.CategoryID, &t.Title, &t.Description,
 		&t.Deadline, &t.ReminderAt, &t.ReminderJobID, &t.Priority, &t.Status,
 		&t.SnoozeUntil, &t.DoneAt, &t.CreatedAt, &t.UpdatedAt,
-		&t.DurationMinutes, &t.Subtasks,
+		&t.DurationMinutes, &t.Subtasks, &t.RecurrenceRule, &t.RecurrenceEndDate,
 	)
 	if err != nil {
 		return nil, err

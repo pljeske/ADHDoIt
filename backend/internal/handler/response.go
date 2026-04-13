@@ -20,21 +20,23 @@ type SubtaskItem struct {
 // It converts pgtype nullable fields to plain Go nullable types so the
 // JSON output is clean (strings, numbers, nulls — no nested structs).
 type TodoResponse struct {
-	ID              uuid.UUID     `json:"id"`
-	UserID          uuid.UUID     `json:"user_id"`
-	CategoryID      *uuid.UUID    `json:"category_id"`
-	Title           string        `json:"title"`
-	Description     *string       `json:"description"`
-	Deadline        *string       `json:"deadline"`    // "YYYY-MM-DD"
-	ReminderAt      *time.Time    `json:"reminder_at"` // RFC3339
-	Priority        int16         `json:"priority"`
-	Status          db.TodoStatus `json:"status"`
-	SnoozeUntil     *string       `json:"snooze_until"` // "YYYY-MM-DD"
-	DoneAt          *time.Time    `json:"done_at"`
-	CreatedAt       time.Time     `json:"created_at"`
-	UpdatedAt       time.Time     `json:"updated_at"`
-	DurationMinutes *int32        `json:"duration_minutes"`
-	Subtasks        []SubtaskItem `json:"subtasks"`
+	ID                uuid.UUID     `json:"id"`
+	UserID            uuid.UUID     `json:"user_id"`
+	CategoryID        *uuid.UUID    `json:"category_id"`
+	Title             string        `json:"title"`
+	Description       *string       `json:"description"`
+	Deadline          *string       `json:"deadline"`    // "YYYY-MM-DD"
+	ReminderAt        *time.Time    `json:"reminder_at"` // RFC3339
+	Priority          int16         `json:"priority"`
+	Status            db.TodoStatus `json:"status"`
+	SnoozeUntil       *string       `json:"snooze_until"` // "YYYY-MM-DD"
+	DoneAt            *time.Time    `json:"done_at"`
+	CreatedAt         time.Time     `json:"created_at"`
+	UpdatedAt         time.Time     `json:"updated_at"`
+	DurationMinutes   *int32        `json:"duration_minutes"`
+	Subtasks          []SubtaskItem `json:"subtasks"`
+	RecurrenceRule    *string       `json:"recurrence_rule"`
+	RecurrenceEndDate *string       `json:"recurrence_end_date"`
 }
 
 func toTodoResponse(t *db.Todo) TodoResponse {
@@ -76,6 +78,13 @@ func toTodoResponse(t *db.Todo) TodoResponse {
 		if r.Subtasks == nil {
 			r.Subtasks = []SubtaskItem{}
 		}
+	}
+	if t.RecurrenceRule.Valid {
+		r.RecurrenceRule = &t.RecurrenceRule.String
+	}
+	if t.RecurrenceEndDate.Valid {
+		s := t.RecurrenceEndDate.Time.Format("2006-01-02")
+		r.RecurrenceEndDate = &s
 	}
 
 	return r

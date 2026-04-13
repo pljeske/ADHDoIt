@@ -47,22 +47,24 @@ type Category struct {
 }
 
 type Todo struct {
-	ID              uuid.UUID          `json:"id"`
-	UserID          uuid.UUID          `json:"user_id"`
-	CategoryID      pgtype.UUID        `json:"category_id"`
-	Title           string             `json:"title"`
-	Description     pgtype.Text        `json:"description"`
-	Deadline        pgtype.Date        `json:"deadline"`
-	ReminderAt      pgtype.Timestamptz `json:"reminder_at"`
-	ReminderJobID   pgtype.Int8        `json:"reminder_job_id"`
-	Priority        int16              `json:"priority"`
-	Status          TodoStatus         `json:"status"`
-	SnoozeUntil     pgtype.Date        `json:"snooze_until"`
-	DoneAt          pgtype.Timestamptz `json:"done_at"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
-	DurationMinutes pgtype.Int4        `json:"duration_minutes"`
-	Subtasks        []byte             `json:"subtasks"` // JSONB
+	ID                uuid.UUID          `json:"id"`
+	UserID            uuid.UUID          `json:"user_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	Deadline          pgtype.Date        `json:"deadline"`
+	ReminderAt        pgtype.Timestamptz `json:"reminder_at"`
+	ReminderJobID     pgtype.Int8        `json:"reminder_job_id"`
+	Priority          int16              `json:"priority"`
+	Status            TodoStatus         `json:"status"`
+	SnoozeUntil       pgtype.Date        `json:"snooze_until"`
+	DoneAt            pgtype.Timestamptz `json:"done_at"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	DurationMinutes   pgtype.Int4        `json:"duration_minutes"`
+	Subtasks          []byte             `json:"subtasks"` // JSONB
+	RecurrenceRule    pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEndDate pgtype.Date        `json:"recurrence_end_date"`
 }
 
 type PushSubscription struct {

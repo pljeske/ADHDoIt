@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Plus, Trash2, X } from 'lucide-react'
+import { Plus, Repeat, X } from 'lucide-react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetClose } from './ui/sheet'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -22,7 +22,17 @@ const schema = z.object({
   priority: z.number().min(0).max(3),
   reminder_at: z.string(),
   duration_minutes: z.string(), // stored as string from input, parsed on submit
+  recurrence_rule: z.string(),
+  recurrence_end_date: z.string(),
 })
+
+const RECURRENCE_OPTIONS = [
+  { value: '', label: 'Does not repeat' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekdays', label: 'Every weekday (Mon–Fri)' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+]
 
 type FormData = z.infer<typeof schema>
 
@@ -74,6 +84,8 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
       priority: 0,
       reminder_at: '',
       duration_minutes: '',
+      recurrence_rule: '',
+      recurrence_end_date: '',
     },
   })
 
@@ -88,6 +100,8 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
         priority: todo.priority,
         reminder_at: todo.reminder_at ? format(new Date(todo.reminder_at), "yyyy-MM-dd'T'HH:mm") : '',
         duration_minutes: todo.duration_minutes ? String(todo.duration_minutes) : '',
+        recurrence_rule: todo.recurrence_rule ?? '',
+        recurrence_end_date: todo.recurrence_end_date ?? '',
       })
       setSubtasks(todo.subtasks ?? [])
     } else {
@@ -99,6 +113,8 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
         priority: 0,
         reminder_at: format(new Date(Date.now() + 60 * 60 * 1000), "yyyy-MM-dd'T'HH:mm"),
         duration_minutes: '',
+        recurrence_rule: '',
+        recurrence_end_date: '',
       })
       setSubtasks([])
     }
@@ -136,6 +152,8 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
       reminder_at: data.reminder_at ? new Date(data.reminder_at).toISOString() : null,
       duration_minutes: !isNaN(durationParsed) && durationParsed > 0 ? durationParsed : null,
       subtasks,
+      recurrence_rule: data.recurrence_rule || null,
+      recurrence_end_date: data.recurrence_end_date || null,
     }
     try {
       if (isEdit && todo) {
@@ -272,6 +290,52 @@ export function TodoFormSheet({ open, onOpenChange, todo }: Props) {
               min={1}
               placeholder="e.g. 30"
               {...register('duration_minutes')}
+            />
+          </div>
+
+          {/* Recurrence */}
+          <div>
+            <Label htmlFor="recurrence_rule">
+              <span className="inline-flex items-center gap-1.5">
+                <Repeat className="h-3 w-3 text-white/40" strokeWidth={1.5} />
+                Repeat
+              </span>
+            </Label>
+            <Controller
+              name="recurrence_rule"
+              control={control}
+              render={({ field }) => (
+                <Select id="recurrence_rule" value={field.value} onChange={field.onChange}>
+                  {RECURRENCE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            />
+            {/* End date — only shown when a rule is selected */}
+            <Controller
+              name="recurrence_end_date"
+              control={control}
+              render={({ field: endField }) => {
+                const ruleValue = control._formValues?.recurrence_rule
+                if (!ruleValue) return <></>
+                return (
+                  <div className="mt-2">
+                    <Label htmlFor="recurrence_end_date" className="text-white/40">
+                      End date <span className="text-white/25">(optional)</span>
+                    </Label>
+                    <Input
+                      id="recurrence_end_date"
+                      type="date"
+                      value={endField.value ?? ''}
+                      onChange={endField.onChange}
+                      onBlur={endField.onBlur}
+                    />
+                  </div>
+                )
+              }}
             />
           </div>
 
