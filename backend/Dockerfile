@@ -21,4 +21,11 @@ LABEL org.opencontainers.image.title="ADHDoIt Backend" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.licenses="MIT"
 COPY --from=builder /adhdoit-server /adhdoit-server
+# 65532:0 = distroless "nonroot" UID, GID 0 (root group).
+# GID 0 is required for OpenShift's arbitrary-UID model: the platform assigns a
+# random UID at runtime that belongs to GID 0, so files writable by the root
+# group remain accessible. The backend binary is stateless and writes nothing to
+# disk, so no chown/chmod is needed beyond the USER declaration.
+EXPOSE 8080
+USER 65532:0
 ENTRYPOINT ["/adhdoit-server"]

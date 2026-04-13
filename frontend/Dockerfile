@@ -25,3 +25,16 @@ LABEL org.opencontainers.image.title="ADHDoIt Frontend" \
 COPY ./Caddyfile /etc/caddy/Caddyfile
 COPY --from=builder /app/dist /srv
 COPY --from=builder /app/public/sw.js /srv/sw.js
+
+# Fix ownership and permissions so Caddy runs as a non-root user and is
+# compatible with OpenShift's arbitrary-UID model (assigned UID belongs to GID 0).
+# /data and /config are Caddy's XDG storage dirs (set by the base image via ENV).
+# They need to be group-writable; /srv and /etc/caddy only need group-readable.
+RUN mkdir -p /data/caddy /config/caddy \
+    && chown -R 1001:0 /data /config /srv /etc/caddy \
+    && chmod -R g+rwX /data /config \
+    && chmod -R g+rX  /srv /etc/caddy
+
+EXPOSE 8080
+# 1001:0 = non-root UID, GID 0 (root group) — satisfies OpenShift restricted SCC
+USER 1001:0
