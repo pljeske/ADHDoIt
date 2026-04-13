@@ -45,17 +45,35 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(30_000_000_000)) // 30s
 
-	// Global rate limiter: 60 req/min per IP, burst 20.
-	globalLimiter := mw.NewRateLimiter(rate.Every(time.Second), 20)
-	r.Use(globalLimiter.Middleware)
-
 	authHandler := handler.NewAuthHandler(queries, cfg)
 	categoryHandler := handler.NewCategoryHandler(queries)
 	todoHandler := handler.NewTodoHandler(queries, pool, riverClient, cfg)
 	pushHandler := handler.NewPushHandler(queries)
 	adminHandler := handler.NewAdminHandler(queries)
 
+	// Kubernetes probe endpoints — no rate limiting so kubelet is never blocked.
+	r.Get("/healthz/live", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+	r.Get("/healthz/ready", func(w http.ResponseWriter, r *http.Request) {
+		if err := pool.Ping(r.Context()); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte(`{"status":"unavailable","checks":{"database":"error"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok","checks":{"database":"ok"}}`))
+	})
+
 	r.Route("/api/v1", func(r chi.Router) {
+		// Global rate limiter: 60 req/min per IP, burst 20.
+		// Applied inside /api/v1 so probe endpoints are exempt.
+		globalLimiter := mw.NewRateLimiter(rate.Every(time.Second), 20)
+		r.Use(globalLimiter.Middleware)
 		// Public auth routes — each has its own tight rate limit in addition to
 		// the global limiter already applied above.
 		//
@@ -103,15 +121,6 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 				r.Patch("/admin/settings", adminHandler.UpdateSettings)
 			})
 		})
-	})
-
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		if err := pool.Ping(r.Context()); err != nil {
-			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
