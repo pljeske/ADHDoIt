@@ -69,10 +69,21 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isFirst := false
+	if count, err := h.q.CountUsers(r.Context()); err == nil && count == 0 {
+		isFirst = true
+	}
+
 	user, err := h.q.CreateUser(r.Context(), req.Email, string(hash), req.Name, req.Timezone)
 	if err != nil {
 		respondError(w, http.StatusConflict, "email already in use", "CONFLICT")
 		return
+	}
+
+	if isFirst {
+		if promoted, err := h.q.SetUserRole(r.Context(), &db.SetUserRoleParams{ID: user.ID, Role: "admin"}); err == nil {
+			user = promoted
+		}
 	}
 
 	accessToken, refreshTokenRaw, err := h.issueTokens(r, user)
