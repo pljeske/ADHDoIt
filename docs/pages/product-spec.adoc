@@ -1,0 +1,447 @@
+= ADHDoIt — Product Specification
+
+== Repository Layout
+
+----
+adhdo-it/
+├── CLAUDE.md
+├── compose.yml
+├── .env.example
+├── backend/
+│   ├── Dockerfile
+│   ├── go.mod / go.sum
+│   ├── cmd/server/main.go        ← entrypoint; starts HTTP server + River worker
+│   └── internal/
+│       ├── config/               ← env var loading
+│       ├── db/                   ← sqlc generated code
+│       │   ├── migrations/       ← golang-migrate SQL files
+│       │   ├── queries/          ← .sql query files for sqlc
+│       │   └── sqlc.yaml
+│       ├── handler/              ← HTTP handlers, one file per resource
+│       ├── middleware/           ← auth, logging, CORS
+│       ├── model/                ← shared domain types
+│       ├── notification/         ← SMTP + webpush dispatch
+│       ├── worker/               ← River job definitions
+│       └── server/               ← chi router setup
+└── frontend/
+    ├── Dockerfile
+    ├── Caddyfile                 ← baked into frontend image
+    ├── vite.config.ts / tsconfig.json / tailwind.config.ts
+    └── src/
+        ├── routes/
+        │   ├── __root.tsx
+        │   ├── login.tsx / register.tsx
+        │   └── app/
+        │       ├── __layout.tsx
+        │       ├── today.tsx / upcoming.tsx / overdue.tsx / done.tsx
+        │       └── category.$id.tsx
+        ├── components/
+        │   ├── TodoItem.tsx / TodoList.tsx / TodoFormSheet.tsx
+        │   ├── QuickCapture.tsx / CategoryBadge.tsx / AppShell.tsx
+        ├── api/                  ← TanStack Query hooks + fetch wrappers
+        │   ├── client.ts / todos.ts / categories.ts / auth.ts
+        ├── store/                ← Zustand: auth token, UI state
+        └── lib/
+            ├── utils.ts          ← cn(), date helpers
+            └── sw.ts             ← service worker registration for Web Push
+----
+
+== Tech Stack
+
+=== Backend
+
+|===
+|Concern |Package 
+
+|HTTP router |`github.com/go-chi/chi/v5` 
+|CORS |`github.com/go-chi/cors` 
+|DB driver |`github.com/jackc/pgx/v5` 
+|Query gen |`sqlc` 
+|Migrations |`github.com/golang-migrate/migrate/v4` 
+|Auth / JWT |`github.com/golang-jwt/jwt/v5` 
+|Password |`golang.org/x/crypto/bcrypt` 
+|Job queue |`github.com/riverqueue/river` + `riverpgxv5` 
+|Web Push |`github.com/SherClockHolmes/webpush-go` 
+|Validation |`github.com/go-playground/validator/v10` 
+|Env |`github.com/joho/godotenv` 
+|UUIDs |`github.com/google/uuid` 
+|Logging |`log/slog` (structured JSON in prod) 
+|===
+
+=== Frontend
+
+|===
+|Concern |Package 
+
+|Framework |React 18 + Vite + TypeScript 
+|UI |shadcn/ui (Radix UI + Tailwind CSS v4) 
+|Data fetching |`@tanstack/react-query` v5 
+|Routing |`@tanstack/react-router` (manual `createRoute`) 
+|Forms |`react-hook-form` + `zod` 
+|Dates |`date-fns` 
+|State |`zustand` (auth token only) 
+|Icons |`lucide-react` 
+|===
+
+== Environment Variables
+
+[source,bash]
+----
+DATABASE_URL=postgres://adhdo:secret@db:5432/adhdo?sslmode=disable
+JWT_SECRET=change-me-32-chars-minimum
+JWT_ACCESS_TTL=15m
+JWT_REFRESH_TTL=30d
+PORT=8080
+ENVIRONMENT=production            # or development
+DOMAIN=localhost
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=noreply@example.com
+SMTP_PASSWORD=
+SMTP_FROM=ADHDoIt <noreply@example.com>
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:admin@example.com
+VITE_API_BASE_URL=/api/v1
+VITE_VAPID_PUBLIC_KEY=
+----
+
+Load with `godotenv.Load()` only when `ENVIRONMENT != production`.
+
+== Database Schema
+
+=== 000001_init.up.sql
+
+[source,sql]
+----
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE TYPE todo_status AS ENUM ('active', 'snoozed', 'done');
+
+CREATE TABLE users (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    name          TEXT NOT NULL,
+    timezone      TEXT NOT NULL DEFAULT 'UTC',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE refresh_tokens (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON refresh_tokens(user_id);
+CREATE INDEX ON refresh_tokens(expires_at);
+
+CREATE TABLE categories (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL DEFAULT '#6366f1',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON categories(user_id);
+
+CREATE TABLE todos (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category_id  UUID REFERENCES categories(id) ON DELETE SET NULL,
+    title        TEXT NOT NULL,
+    description  TEXT,
+    deadline     DATE NOT NULL,
+    reminder_at  TIMESTAMPTZ,
+    priority     SMALLINT NOT NULL DEFAULT 0 CHECK (priority BETWEEN 0 AND 3),
+    status       todo_status NOT NULL DEFAULT 'active',
+    snooze_until DATE,
+    done_at      TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON todos(user_id, status, deadline);
+CREATE INDEX ON todos(user_id, category_id);
+CREATE INDEX ON todos(reminder_at) WHERE reminder_at IS NOT NULL AND status != 'done';
+
+CREATE TABLE push_subscriptions (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint   TEXT NOT NULL UNIQUE,
+    p256dh     TEXT NOT NULL,
+    auth       TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX ON push_subscriptions(user_id);
+----
+
+Also run River migrations: `rivermigrate.New(driver).Up(ctx, nil)` after own migrations.
+
+== sqlc Setup
+
+`backend/internal/db/sqlc.yaml`:
+
+[source,yaml]
+----
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "queries/"
+    schema: "migrations/"
+    gen:
+      go:
+        package: "db"
+        out: "."
+        sql_package: "pgx/v5"
+        emit_result_struct_pointers: true
+        emit_params_struct_pointers: true
+----
+
+Key query files: `users.sql`, `todos.sql`, `categories.sql`, `refresh_tokens.sql`, `push_subscriptions.sql`.
+
+Named queries per view (simpler than `sqlc.narg()`):
+
+[source,sql]
+----
+-- name: ListTodosToday :many
+SELECT * FROM todos WHERE user_id = $1 AND status = 'active'
+  AND deadline = (CURRENT_DATE AT TIME ZONE $2)::date
+ORDER BY priority DESC, deadline ASC, created_at ASC;
+
+-- name: ListTodosUpcoming :many
+SELECT * FROM todos WHERE user_id = $1 AND status = 'active'
+  AND deadline > CURRENT_DATE AT TIME ZONE $2
+ORDER BY deadline ASC, priority DESC, created_at ASC;
+
+-- name: ListTodosOverdue :many
+SELECT * FROM todos WHERE user_id = $1 AND status = 'active'
+  AND deadline < CURRENT_DATE AT TIME ZONE $2
+ORDER BY deadline ASC, priority DESC, created_at ASC;
+
+-- name: ListTodosDone :many
+SELECT * FROM todos WHERE user_id = $1 AND status = 'done'
+ORDER BY done_at DESC;
+
+-- name: ListTodosByCategory :many
+SELECT * FROM todos WHERE user_id = $1 AND category_id = $2 AND status != 'done'
+ORDER BY deadline ASC, priority DESC, created_at ASC;
+----
+
+== API Design
+
+Base: `/api/v1` — authenticated endpoints require `Authorization: Bearer <token>`.
+
+=== Auth
+
+----
+POST   /auth/register   → 201 {user, access_token, refresh_token}
+POST   /auth/login      → 200 {user, access_token, refresh_token}
+POST   /auth/refresh    → 200 {access_token, refresh_token}  (token rotated)
+DELETE /auth/logout     → 204
+----
+
+=== Todos
+
+----
+GET    /todos?view=today|upcoming|overdue|done&category_id=<uuid>&sort=deadline|priority|created_at&order=asc|desc
+POST   /todos           → 201
+GET    /todos/:id       → 200
+PATCH  /todos/:id       → 200  (partial update; reminder_at change cancels/re-enqueues River job)
+DELETE /todos/:id       → 204
+POST   /todos/:id/snooze  body: {snooze_until: "YYYY-MM-DD"} → 200
+POST   /todos/:id/done    → 200
+POST   /todos/:id/reopen  → 200
+----
+
+=== Categories
+
+----
+GET    /categories      → 200
+POST   /categories      → 201
+PATCH  /categories/:id  → 200
+DELETE /categories/:id  → 204  (todos get category_id = NULL)
+----
+
+=== Push Subscriptions
+
+----
+POST   /push/subscribe  body: {endpoint, keys: {p256dh, auth}} → 204 (upsert)
+DELETE /push/subscribe  → 204
+----
+
+=== Error Shape
+
+[source,json]
+----
+{ "error": "human-readable message", "code": "MACHINE_CODE" }
+----
+
+Status codes: 400, 401, 403, 404, 409 (duplicate email), 422, 500.
+
+== Go Server Structure
+
+=== `cmd/server/main.go` startup order
+
+. Load config from env
+. `pgxpool.New()` — connect to PostgreSQL
+. Run golang-migrate then River migrations
+. Build sqlc `Queries` struct
+. Start River worker goroutine
+. Build chi router with middleware
+. `http.ListenAndServe()`
+. Handle OS signals → graceful shutdown (drain River, close pool)
+
+=== Middleware stack
+
+[source,go]
+----
+r.Use(middleware.RealIP)
+r.Use(middleware.RequestID)
+r.Use(slogMiddleware)
+r.Use(cors.Handler(...))
+r.Use(middleware.Recoverer)
+r.Use(middleware.Timeout(30 * time.Second))
+// Auth middleware applied per-route group, not globally
+----
+
+=== Handler pattern
+
+[source,go]
+----
+type TodoHandler struct {
+    q     *db.Queries
+    pool  *pgxpool.Pool
+    river *river.Client[pgx.Tx]
+    cfg   *config.Config
+}
+// decode → validate → sqlc query → respondJSON / respondError
+----
+
+=== JWT
+
+* Access: 15m, HS256, claims: `user_id` + `email`
+* Refresh: random 32-byte, SHA-256 hashed in DB, rotated on use
+
+== River Worker
+
+[source,go]
+----
+type ReminderArgs struct {
+    TodoID string `json:"todo_id"`
+    UserID string `json:"user_id"`
+}
+func (ReminderArgs) Kind() string { return "reminder" }
+----
+
+Worker: fetch todo → if done/missing, skip → fetch user + push subs → send email + web push concurrently → log; don't fail job on single channel failure.
+
+Enqueue transactionally with todo update:
+
+[source,go]
+----
+_, err = river.InsertTx(ctx, tx, ReminderArgs{TodoID: id}, &river.InsertOpts{ScheduledAt: reminderAt})
+----
+
+Cancel via `reminder_job_id` column on `todos`: call `riverClient.JobCancel(ctx, jobID)` before re-enqueueing.
+
+== Frontend Structure
+
+=== Auth Flow
+
+* `access_token` in Zustand memory; `refresh_token` in `localStorage`
+* On load: silent refresh → set `isAuthReady = true` → render app
+* `api/client.ts`: injects Bearer header; on 401 refresh-then-retry once; redirects to `/login` on failure
+
+=== TanStack Query Keys
+
+[source,typescript]
+----
+['todos', view, categoryId, sort, order]  // list
+['todos', id]                             // single
+['categories']
+----
+
+Invalidate `['todos']` after any mutation.
+
+=== Route → View Map
+
+|===
+|Route |view param |Notes 
+
+|`/app/today` |`today` |also fetches `overdue` for collapsed section 
+|`/app/upcoming` |`upcoming` | 
+|`/app/overdue` |`overdue` | 
+|`/app/done` |`done` | 
+|`/app/category/:id` |— |uses `category_id` filter 
+|===
+
+=== Today View — Overdue Section
+
+. Today's todos (priority → deadline)
+. Collapsible "X overdue" section at bottom
+. Each overdue item: Reschedule (date picker popover) + Done button
+
+=== TodoItem
+
+Priority left border: gray / blue / amber / red. Shows: checkbox, title, category badge, deadline, reminder bell. Hover: edit, reschedule, delete.
+
+=== TodoFormSheet (shadcn `Sheet`, right-side)
+
+Fields: Title (autofocus, required), Description, Deadline (defaults today), Category (+ inline creation), Priority (segmented: none/low/medium/high), Reminder (datetime, defaults +1h for new).
+
+=== QuickCapture (`src/components/QuickCapture.tsx`)
+
+Inline input at top of list views. Enter = instant create; Esc = clear. Auto-sets `deadline=today` (Today view), `category_id` (Category view).
+
+=== SortControls
+
+Toggle buttons: Deadline | Priority | Created + Asc/Desc. State in URL search params.
+
+=== Service Worker (Web Push)
+
+`src/lib/sw.ts`: check permission → subscribe → POST to `/push/subscribe` via `apiFetch`.
+
+`public/sw.js`:
+
+[source,javascript]
+----
+self.addEventListener('push', event => {
+    let data = {};
+    try { data = event.data?.json() ?? {}; } catch (_) {}
+    event.waitUntil(self.registration.showNotification(data.title ?? 'ADHDoIt', {
+        body: data.body, data: { url: data.url ?? '/' }
+    }));
+});
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    event.waitUntil(clients.openWindow(event.notification.data.url));
+});
+----
+
+== Docker / Infra Notes
+
+* Frontend listens on *8080* (Podman rootless can't bind 80)
+* Caddyfile *baked into image* — not a volume mount
+* `http://` prefix in Caddyfile disables auto-HTTPS for local dev
+* Dockerfiles inject `VERSION`, `COMMIT`, `BUILD_DATE` build args as OCI labels
+
+== Implementation Order
+
+. Scaffold — repo, `go mod init`, `npm create vite`, compose, `.env.example`
+. Database — migrations, `sqlc generate`
+. Auth backend — register/login/refresh/logout, JWT, middleware
+. Auth frontend — login/register pages, token store, api client
+. Categories backend — full CRUD
+. Categories frontend — sidebar/nav, inline creation in form
+. Todos backend — full CRUD, view queries, action endpoints
+. Todos frontend — Today view first, then others, FormSheet
+. Sorting — URL param controls
+. Reminders — River worker, SMTP, job enqueue/cancel
+. Web Push — service worker, VAPID, subscribe endpoint
+. Docker prod build — multi-stage Dockerfiles, Caddyfile
+. Polish — empty states, skeletons, error boundaries, keyboard shortcut `n`
+
+== Non-Goals (Initial)
+
+OAuth/SSO, file attachments, subtasks, team todos, native mobile, Redis, admin panel.

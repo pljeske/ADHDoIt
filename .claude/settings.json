@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph update --skip-flows",
+            "timeout": 5000
+          },
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); [ -z \"$f\" ] && exit 0; echo \"$f\" | grep -qE '\\.(adoc|md)$' && exit 0; echo \"$f\" | grep -q '/docs/' && exit 0; printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"Source file changed. If user-facing behavior changed, consider updating README.adoc or docs/pages/user-guide.adoc.\"}}'"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "code-review-graph status",
+            "timeout": 3000
+          }
+        ]
+      }
+    ]
+  }
+}

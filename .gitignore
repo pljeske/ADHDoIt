@@ -235,7 +235,8 @@ go.work
 go.work.sum
 
 # AI
-.claude
+.claude/settings.local.json
+.code-review-graph
 
 # App-specific
 .env

@@ -1,0 +1,76 @@
+= ADHDoIt — Runbook &amp; Gotchas
+
+== Common Operations
+
+[source,bash]
+----
+# Start full stack
+docker compose up -d --build
+
+# Tail logs
+docker compose logs -f app
+docker compose logs -f frontend
+
+# Frontend dev (hot reload)
+cd frontend && npm run dev
+
+# Type-check / prod build
+cd frontend && npm run build
+
+# Regenerate sqlc after editing .sql files
+cd backend/internal/db && sqlc generate
+
+# Generate VAPID keys (once, store in .env)
+npx web-push generate-vapid-keys
+----
+
+== Bugs &amp; Gotchas Discovered During Development
+
+=== Go: Assign all request fields to DB params
+
+When writing a new handler, verify every field from the request struct is assigned to the sqlc params struct. Missing `params.Title = req.Title` silently created todos with empty titles despite passing validation.
+
+=== Auth: Single refresh + isAuthReady gate
+
+`__root.tsx` and `apiFetch`'s 401 handler both call `/auth/refresh` with the same token. Token rotation means one call invalidates the other → logout loop.
+
+*Fix*: `isAuthReady` bool in `src/store/auth.ts`. `__root.tsx` renders a blank screen until the one initial refresh resolves, preventing TanStack Query from firing early.
+
+=== Web Push: use apiFetch, not raw fetch
+
+`registerPushSubscription` in `sw.ts` must use `apiFetch` — JWTs are in memory (not cookies), so raw `fetch` sends no auth header and `/push/subscribe` silently 401s.
+
+=== Web Push: wrap json() in try-catch
+
+In `sw.js`, wrap `event.data?.json()` in try-catch — DevTools "Push" and some push services send plain text, causing unhandled parse errors that silently swallow notifications.
+
+=== datetime-local: always convert UTC → local before display
+
+API timestamps are UTC (e.g. `"2026-04-09T08:16:00Z"`). `.slice(0, 16)` on a UTC string shows UTC time in a `datetime-local` input. Use date-fns:
+
+[source,typescript]
+----
+format(new Date(utcString), "yyyy-MM-dd'T'HH:mm")
+----
+
+Submission: `new Date("2026-04-09T10:16")` parses as local; `.toISOString()` gives correct UTC.
+
+=== react-hook-form: custom controls must use Controller
+
+Fields set only via `setValue()` (no `register()`-attached DOM element) come through as `undefined` in `handleSubmit` → zod fails silently, `onSubmit` never fires. Always use `<Controller>` for segmented controls, custom pickers, etc.
+
+=== TypeScript path aliases: paths without baseUrl
+
+With `moduleResolution: "bundler"`, use `paths` alone — `baseUrl` is deprecated (TS 6.0+) and causes build errors. Configure `@/*` in both `tsconfig.json` (`paths`) and `vite.config.ts` (`resolve.alias`).
+
+=== Tailwind v4 migration
+
+* Install `@tailwindcss/postcss`; use instead of `tailwindcss` in `postcss.config`
+* Replace `@tailwind base/components/utilities` with `@import "tailwindcss"`
+* Use `@config "../tailwind.config.ts"` in CSS to keep v3-style config
+* `autoprefixer` not needed (v4 built-in)
+
+=== Docker CI Dockerfiles
+
+Build context is each component's subdirectory (`./backend`, `./frontend`).
+CI uses `context: ./${{ matrix.component }}` and `file: ./${{ matrix.component }}/Dockerfile`.

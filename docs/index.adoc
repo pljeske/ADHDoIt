@@ -10,6 +10,8 @@ ADHD-friendly multi-user todo list. Fast capture, smart views, reminders via ema
 
 include::pages/features.adoc[leveloffset=+1]
 
-include::pages/user-guide.adoc[leveloffset=+1]
+include::pages/product-spec.adoc[leveloffset=+1]
 
-include::pages/developer.adoc[leveloffset=+1]
+include::pages/runbook.adoc[leveloffset=+1]
+
+include::pages/user-guide.adoc[leveloffset=+1]
