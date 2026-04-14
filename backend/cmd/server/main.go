@@ -12,6 +12,7 @@ import (
 
 	"adhdoit/internal/config"
 	"adhdoit/internal/db"
+	"adhdoit/internal/handler"
 	"adhdoit/internal/server"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -83,7 +84,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpServer := server.New(cfg, pool, queries, riverClient)
+	githubHandler := handler.NewGitHubHandler(queries, cfg)
+	if githubHandler != nil {
+		slog.Info("GitHub OAuth2 enabled")
+	}
+
+	httpServer := server.New(cfg, pool, queries, riverClient, githubHandler)
 
 	go func() {
 		slog.Info("server listening", "addr", httpServer.Addr, "version", version, "commit", commit)

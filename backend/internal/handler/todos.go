@@ -136,6 +136,7 @@ func (h *TodoHandler) Create(w http.ResponseWriter, r *http.Request) {
 		UserID:   uid,
 		Title:    req.Title,
 		Priority: 0,
+		Subtasks: []byte("[]"),
 	}
 
 	if req.Description != nil {

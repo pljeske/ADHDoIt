@@ -24,6 +24,32 @@ cd backend/internal/db && sqlc generate
 npx web-push generate-vapid-keys
 ----
 
+== GitHub OAuth2 Setup
+
+. GitHub → Settings → Developer settings → OAuth Apps → *New OAuth App*
+. Fill in:
+** *Application name*: ADHDoIt (or your app name)
+** *Homepage URL*: `http://localhost:5173` (dev) or your production URL
+** *Authorization callback URL*: `http://localhost:8080/api/v1/auth/github/callback`
+. Click *Register application*, then generate a *Client Secret*.
+. Add to `.env`:
++
+[source,bash]
+----
+GITHUB_CLIENT_ID=<your-client-id>
+GITHUB_CLIENT_SECRET=<your-client-secret>
+GITHUB_REDIRECT_URI=http://localhost:8080/api/v1/auth/github/callback
+FRONTEND_URL=http://localhost:5173
+----
+. Add to frontend env (build-time):
++
+[source,bash]
+----
+VITE_GITHUB_AUTH_ENABLED=true
+----
+
+*SSO across multiple apps*: register each app as its own GitHub OAuth App (or add multiple callback URLs to one app). Users authenticate against the same GitHub identity — no separate account needed per app.
+
 == Bugs &amp; Gotchas Discovered During Development
 
 === Go: Assign all request fields to DB params
@@ -74,3 +100,15 @@ With `moduleResolution: "bundler"`, use `paths` alone — `baseUrl` is deprecate
 
 Build context is each component's subdirectory (`./backend`, `./frontend`).
 CI uses `context: ./${{ matrix.component }}` and `file: ./${{ matrix.component }}/Dockerfile`.
+
+=== GitHub OAuth: email may be empty from /user
+
+GitHub users can set their email to private. `GET https://api.github.com/user` then returns `email: null`.
+
+*Fix*: After fetching `/user`, if `email` is empty, call `GET https://api.github.com/user/emails` and pick the entry where `primary=true && verified=true`.  The `GitHubHandler.Callback` in `handler/oidc.go` already does this — do not regress it.
+
+=== GitHub OAuth: state cookie requires SameSite=Lax
+
+The OAuth callback is a cross-site redirect from GitHub back to the app.  If the state cookie uses `SameSite=Strict`, the browser will not send it on the callback request → state validation fails → 400.
+
+Use `SameSite=Lax` (current implementation) to allow the cookie on top-level cross-site navigations (redirects), while still blocking it on third-party AJAX requests.

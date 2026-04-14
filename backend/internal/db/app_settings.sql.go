@@ -26,8 +26,8 @@ ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
 `
 
 type SetAppSettingParams struct {
-	Key   string
-	Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func (q *Queries) SetAppSetting(ctx context.Context, arg *SetAppSettingParams) error {

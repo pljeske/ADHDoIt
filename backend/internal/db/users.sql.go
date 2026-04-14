@@ -22,17 +22,52 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const createOIDCUser = `-- name: CreateOIDCUser :one
+INSERT INTO users (email, password_hash, name, timezone, oidc_subject)
+VALUES ($1, '', $2, $3, $4)
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
+`
+
+type CreateOIDCUserParams struct {
+	Email       string      `json:"email"`
+	Name        string      `json:"name"`
+	Timezone    string      `json:"timezone"`
+	OidcSubject pgtype.Text `json:"oidc_subject"`
+}
+
+func (q *Queries) CreateOIDCUser(ctx context.Context, arg *CreateOIDCUserParams) (*User, error) {
+	row := q.db.QueryRow(ctx, createOIDCUser,
+		arg.Email,
+		arg.Name,
+		arg.Timezone,
+		arg.OidcSubject,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Role,
+		&i.OidcSubject,
+	)
+	return &i, err
+}
+
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, name, timezone)
 VALUES ($1, $2, $3, $4)
-RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
 `
 
 type CreateUserParams struct {
-	Email        string
-	PasswordHash string
-	Name         string
-	Timezone     string
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+	Name         string `json:"name"`
+	Timezone     string `json:"timezone"`
 }
 
 func (q *Queries) CreateUser(ctx context.Context, arg *CreateUserParams) (*User, error) {
@@ -52,6 +87,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg *CreateUserParams) (*User,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }
@@ -66,7 +102,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, password_hash, name, timezone, created_at, updated_at, role FROM users WHERE email = $1
+SELECT id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject FROM users WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, email string) (*User, error) {
@@ -81,12 +117,13 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email string) (*User, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, email, password_hash, name, timezone, created_at, updated_at, role FROM users WHERE id = $1
+SELECT id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (*User, error) {
@@ -101,12 +138,63 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (*User, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
+	)
+	return &i, err
+}
+
+const getUserByOIDCSubject = `-- name: GetUserByOIDCSubject :one
+SELECT id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
+FROM users WHERE oidc_subject = $1
+`
+
+func (q *Queries) GetUserByOIDCSubject(ctx context.Context, oidcSubject pgtype.Text) (*User, error) {
+	row := q.db.QueryRow(ctx, getUserByOIDCSubject, oidcSubject)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Role,
+		&i.OidcSubject,
+	)
+	return &i, err
+}
+
+const linkOIDCSubject = `-- name: LinkOIDCSubject :one
+UPDATE users SET oidc_subject = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
+`
+
+type LinkOIDCSubjectParams struct {
+	ID          pgtype.UUID `json:"id"`
+	OidcSubject pgtype.Text `json:"oidc_subject"`
+}
+
+func (q *Queries) LinkOIDCSubject(ctx context.Context, arg *LinkOIDCSubjectParams) (*User, error) {
+	row := q.db.QueryRow(ctx, linkOIDCSubject, arg.ID, arg.OidcSubject)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.PasswordHash,
+		&i.Name,
+		&i.Timezone,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }
 
 const listUsers = `-- name: ListUsers :many
-SELECT id, email, password_hash, name, timezone, created_at, updated_at, role FROM users ORDER BY created_at ASC
+SELECT id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject FROM users ORDER BY created_at ASC
 `
 
 func (q *Queries) ListUsers(ctx context.Context) ([]*User, error) {
@@ -127,6 +215,7 @@ func (q *Queries) ListUsers(ctx context.Context) ([]*User, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Role,
+			&i.OidcSubject,
 		); err != nil {
 			return nil, err
 		}
@@ -141,12 +230,12 @@ func (q *Queries) ListUsers(ctx context.Context) ([]*User, error) {
 const setUserRole = `-- name: SetUserRole :one
 UPDATE users SET role = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
 `
 
 type SetUserRoleParams struct {
-	ID   pgtype.UUID
-	Role string
+	ID   pgtype.UUID `json:"id"`
+	Role string      `json:"role"`
 }
 
 func (q *Queries) SetUserRole(ctx context.Context, arg *SetUserRoleParams) (*User, error) {
@@ -161,6 +250,7 @@ func (q *Queries) SetUserRole(ctx context.Context, arg *SetUserRoleParams) (*Use
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }
@@ -168,12 +258,12 @@ func (q *Queries) SetUserRole(ctx context.Context, arg *SetUserRoleParams) (*Use
 const updateUserRole = `-- name: UpdateUserRole :one
 UPDATE users SET role = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
 `
 
 type UpdateUserRoleParams struct {
-	ID   pgtype.UUID
-	Role string
+	ID   pgtype.UUID `json:"id"`
+	Role string      `json:"role"`
 }
 
 func (q *Queries) UpdateUserRole(ctx context.Context, arg *UpdateUserRoleParams) (*User, error) {
@@ -188,6 +278,7 @@ func (q *Queries) UpdateUserRole(ctx context.Context, arg *UpdateUserRoleParams)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }
@@ -195,12 +286,12 @@ func (q *Queries) UpdateUserRole(ctx context.Context, arg *UpdateUserRoleParams)
 const updateUserTimezone = `-- name: UpdateUserTimezone :one
 UPDATE users SET timezone = $2, updated_at = NOW()
 WHERE id = $1
-RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
 `
 
 type UpdateUserTimezoneParams struct {
-	ID       pgtype.UUID
-	Timezone string
+	ID       pgtype.UUID `json:"id"`
+	Timezone string      `json:"timezone"`
 }
 
 func (q *Queries) UpdateUserTimezone(ctx context.Context, arg *UpdateUserTimezoneParams) (*User, error) {
@@ -215,6 +306,7 @@ func (q *Queries) UpdateUserTimezone(ctx context.Context, arg *UpdateUserTimezon
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Role,
+		&i.OidcSubject,
 	)
 	return &i, err
 }

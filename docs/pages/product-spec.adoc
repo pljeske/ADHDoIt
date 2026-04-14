@@ -31,6 +31,8 @@ adhdo-it/
         ├── routes/
         │   ├── __root.tsx
         │   ├── login.tsx / register.tsx
+        │   ├── auth/
+        │   │   └── callback.tsx      ← OAuth2 callback (reads hash fragment)
         │   └── app/
         │       ├── __layout.tsx
         │       ├── today.tsx / upcoming.tsx / overdue.tsx / done.tsx
@@ -58,8 +60,9 @@ adhdo-it/
 |DB driver |`github.com/jackc/pgx/v5` 
 |Query gen |`sqlc` 
 |Migrations |`github.com/golang-migrate/migrate/v4` 
-|Auth / JWT |`github.com/golang-jwt/jwt/v5` 
-|Password |`golang.org/x/crypto/bcrypt` 
+|Auth / JWT |`github.com/golang-jwt/jwt/v5`
+|OAuth2 / GitHub SSO |`golang.org/x/oauth2` + `golang.org/x/oauth2/github`
+|Password |`golang.org/x/crypto/bcrypt`
 |Job queue |`github.com/riverqueue/river` + `riverpgxv5` 
 |Web Push |`github.com/SherClockHolmes/webpush-go` 
 |Validation |`github.com/go-playground/validator/v10` 
@@ -104,9 +107,18 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:admin@example.com
 VITE_API_BASE_URL=/api/v1
 VITE_VAPID_PUBLIC_KEY=
+# GitHub OAuth2 SSO (optional)
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_REDIRECT_URI=http://localhost:8080/api/v1/auth/github/callback
+FRONTEND_URL=http://localhost:5173
+VITE_GITHUB_AUTH_ENABLED=false
 ----
 
 Load with `godotenv.Load()` only when `ENVIRONMENT != production`.
+
+NOTE: `FRONTEND_URL` is the origin the backend redirects to after a successful OAuth callback.
+Set to `http://localhost:5173` for local dev; leave empty in production (Caddy serves both on the same origin).
 
 == Database Schema
 
@@ -120,7 +132,7 @@ CREATE TYPE todo_status AS ENUM ('active', 'snoozed', 'done');
 CREATE TABLE users (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email         TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT NOT NULL,      -- empty string for SSO-only accounts
     name          TEXT NOT NULL,
     timezone      TEXT NOT NULL DEFAULT 'UTC',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -177,6 +189,19 @@ CREATE INDEX ON push_subscriptions(user_id);
 ----
 
 Also run River migrations: `rivermigrate.New(driver).Up(ctx, nil)` after own migrations.
+
+=== 000005_oidc.up.sql
+
+[source,sql]
+----
+ALTER TABLE users ADD COLUMN oidc_subject TEXT;
+CREATE UNIQUE INDEX users_oidc_subject_idx ON users(oidc_subject)
+    WHERE oidc_subject IS NOT NULL;
+----
+
+`oidc_subject` stores the provider-namespaced identity (`github:<numeric-id>`).
+Nullable so existing email/password accounts are unaffected.  The partial unique
+index allows unlimited NULL values while enforcing uniqueness for linked accounts.
 
 == sqlc Setup
 
@@ -239,6 +264,10 @@ POST   /auth/register   → 201 {user, access_token, refresh_token}
 POST   /auth/login      → 200 {user, access_token, refresh_token}
 POST   /auth/refresh    → 200 {access_token, refresh_token}  (token rotated)
 DELETE /auth/logout     → 204
+
+# GitHub OAuth2 SSO (only registered when GITHUB_CLIENT_ID is set)
+GET    /auth/github/login     → 302 redirect to GitHub authorization endpoint
+GET    /auth/github/callback  → 302 redirect to {FRONTEND_URL}/auth/callback#access_token=...&refresh_token=...
 ----
 
 === Todos
@@ -353,6 +382,19 @@ Cancel via `reminder_job_id` column on `todos`: call `riverClient.JobCancel(ctx,
 * On load: silent refresh → set `isAuthReady = true` → render app
 * `api/client.ts`: injects Bearer header; on 401 refresh-then-retry once; redirects to `/login` on failure
 
+==== GitHub OAuth2 SSO
+
+. User clicks "Continue with GitHub" → browser navigates to `GET /api/v1/auth/github/login`
+. Backend sets `oauth_state` httpOnly cookie (5 min TTL) and redirects to GitHub
+. GitHub redirects to `GET /api/v1/auth/github/callback?code=...&state=...`
+. Backend validates state cookie, exchanges code, fetches `GET https://api.github.com/user` (+ `/user/emails` if email is private)
+. Backend looks up user by `oidc_subject = "github:<id>"` → links by email → or creates new account
+. Backend issues its own JWT + refresh token and redirects to `{FRONTEND_URL}/auth/callback#access_token=...&refresh_token=...`
+. Frontend `/auth/callback` reads the hash fragment, stores tokens, clears URL, navigates to `/app/today`
+
+Subject is stored as `"github:<numeric-id>"` — namespaced so additional providers can be added without collision.
+Existing email/password accounts are automatically linked on first GitHub login if the email matches.
+
 === TanStack Query Keys
 
 [source,typescript]
@@ -367,13 +409,14 @@ Invalidate `['todos']` after any mutation.
 === Route → View Map
 
 |===
-|Route |view param |Notes 
+|Route |view param |Notes
 
-|`/app/today` |`today` |also fetches `overdue` for collapsed section 
-|`/app/upcoming` |`upcoming` | 
-|`/app/overdue` |`overdue` | 
-|`/app/done` |`done` | 
-|`/app/category/:id` |— |uses `category_id` filter 
+|`/app/today` |`today` |also fetches `overdue` for collapsed section
+|`/app/upcoming` |`upcoming` |
+|`/app/overdue` |`overdue` |
+|`/app/done` |`done` |
+|`/app/category/:id` |— |uses `category_id` filter
+|`/auth/callback` |— |OAuth2 landing page; reads hash fragment, stores tokens
 |===
 
 === Today View — Overdue Section

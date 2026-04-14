@@ -32,8 +32,8 @@ func (e *TodoStatus) Scan(src interface{}) error {
 }
 
 type NullTodoStatus struct {
-	TodoStatus TodoStatus
-	Valid      bool // Valid is true if TodoStatus is not NULL
+	TodoStatus TodoStatus `json:"todo_status"`
+	Valid      bool       `json:"valid"` // Valid is true if TodoStatus is not NULL
 }
 
 // Scan implements the Scanner interface.
@@ -55,63 +55,64 @@ func (ns NullTodoStatus) Value() (driver.Value, error) {
 }
 
 type AppSetting struct {
-	Key   string
-	Value string
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 type Category struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	Name      string
-	Color     string
-	CreatedAt pgtype.Timestamptz
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Name      string             `json:"name"`
+	Color     string             `json:"color"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type PushSubscription struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	Endpoint  string
-	P256dh    string
-	Auth      string
-	CreatedAt pgtype.Timestamptz
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	Endpoint  string             `json:"endpoint"`
+	P256dh    string             `json:"p256dh"`
+	Auth      string             `json:"auth"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type RefreshToken struct {
-	ID        pgtype.UUID
-	UserID    pgtype.UUID
-	TokenHash string
-	ExpiresAt pgtype.Timestamptz
-	CreatedAt pgtype.Timestamptz
+	ID        pgtype.UUID        `json:"id"`
+	UserID    pgtype.UUID        `json:"user_id"`
+	TokenHash string             `json:"token_hash"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type Todo struct {
-	ID                pgtype.UUID
-	UserID            pgtype.UUID
-	CategoryID        pgtype.UUID
-	Title             string
-	Description       pgtype.Text
-	Deadline          pgtype.Date
-	ReminderAt        pgtype.Timestamptz
-	ReminderJobID     pgtype.Int8
-	Priority          int16
-	Status            TodoStatus
-	SnoozeUntil       pgtype.Date
-	DoneAt            pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	DurationMinutes   pgtype.Int4
-	Subtasks          []byte
-	RecurrenceRule    pgtype.Text
-	RecurrenceEndDate pgtype.Date
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	Deadline          pgtype.Date        `json:"deadline"`
+	ReminderAt        pgtype.Timestamptz `json:"reminder_at"`
+	ReminderJobID     pgtype.Int8        `json:"reminder_job_id"`
+	Priority          int16              `json:"priority"`
+	Status            TodoStatus         `json:"status"`
+	SnoozeUntil       pgtype.Date        `json:"snooze_until"`
+	DoneAt            pgtype.Timestamptz `json:"done_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DurationMinutes   pgtype.Int4        `json:"duration_minutes"`
+	Subtasks          []byte             `json:"subtasks"`
+	RecurrenceRule    pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEndDate pgtype.Date        `json:"recurrence_end_date"`
 }
 
 type User struct {
-	ID           pgtype.UUID
-	Email        string
-	PasswordHash string
-	Name         string
-	Timezone     string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	Role         string
+	ID           pgtype.UUID        `json:"id"`
+	Email        string             `json:"email"`
+	PasswordHash string             `json:"password_hash"`
+	Name         string             `json:"name"`
+	Timezone     string             `json:"timezone"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	Role         string             `json:"role"`
+	OidcSubject  pgtype.Text        `json:"oidc_subject"`
 }

@@ -1,21 +1,15 @@
 package handler
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"net/http"
-	"time"
 
 	"adhdoit/internal/config"
 	"adhdoit/internal/db"
 	mw "adhdoit/internal/middleware"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -86,7 +80,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isFirst {
+	if isFirst || h.cfg.IsAdminEmail(req.Email) {
 		if promoted, err := h.q.SetUserRole(r.Context(), &db.SetUserRoleParams{ID: user.ID, Role: "admin"}); err == nil {
 			user = promoted
 		}
@@ -195,38 +189,6 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (h *AuthHandler) issueTokens(r *http.Request, user *db.User) (accessToken, refreshTokenRaw string, err error) {
-	claims := jwt.MapClaims{
-		"user_id": user.ID.String(),
-		"email":   user.Email,
-		"role":    user.Role,
-		"exp":     time.Now().Add(h.cfg.JWTAccessTTL).Unix(),
-		"iat":     time.Now().Unix(),
-	}
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	accessToken, err = t.SignedString([]byte(h.cfg.JWTSecret))
-	if err != nil {
-		return
-	}
-
-	rawBytes := make([]byte, 32)
-	if _, err = rand.Read(rawBytes); err != nil {
-		return
-	}
-	refreshTokenRaw = hex.EncodeToString(rawBytes)
-	hash := hashToken(refreshTokenRaw)
-	expiresAt := time.Now().Add(h.cfg.JWTRefreshTTL)
-	_, err = h.q.CreateRefreshToken(r.Context(), &db.CreateRefreshTokenParams{
-		UserID:    user.ID,
-		TokenHash: hash,
-		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
-	})
-	return
-}
-
-// hashToken produces a deterministic SHA-256 hex digest for safe DB lookup.
-// Refresh tokens are high-entropy random bytes, so SHA-256 is sufficient.
-func hashToken(raw string) string {
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])
+func (h *AuthHandler) issueTokens(r *http.Request, user *db.User) (string, string, error) {
+	return issueTokens(r, user, h.q, h.cfg)
 }

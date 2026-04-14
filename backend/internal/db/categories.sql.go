@@ -18,9 +18,9 @@ RETURNING id, user_id, name, color, created_at
 `
 
 type CreateCategoryParams struct {
-	UserID pgtype.UUID
-	Name   string
-	Color  string
+	UserID pgtype.UUID `json:"user_id"`
+	Name   string      `json:"name"`
+	Color  string      `json:"color"`
 }
 
 func (q *Queries) CreateCategory(ctx context.Context, arg *CreateCategoryParams) (*Category, error) {
@@ -41,8 +41,8 @@ DELETE FROM categories WHERE id = $1 AND user_id = $2
 `
 
 type DeleteCategoryParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) DeleteCategory(ctx context.Context, arg *DeleteCategoryParams) error {
@@ -55,8 +55,8 @@ SELECT id, user_id, name, color, created_at FROM categories WHERE id = $1 AND us
 `
 
 type GetCategoryParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) GetCategory(ctx context.Context, arg *GetCategoryParams) (*Category, error) {
@@ -109,10 +109,10 @@ RETURNING id, user_id, name, color, created_at
 `
 
 type UpdateCategoryParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
-	Name   string
-	Color  string
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
+	Name   string      `json:"name"`
+	Color  string      `json:"color"`
 }
 
 func (q *Queries) UpdateCategory(ctx context.Context, arg *UpdateCategoryParams) (*Category, error) {

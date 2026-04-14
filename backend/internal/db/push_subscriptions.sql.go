@@ -16,8 +16,8 @@ DELETE FROM push_subscriptions WHERE endpoint = $1 AND user_id = $2
 `
 
 type DeletePushSubscriptionParams struct {
-	Endpoint string
-	UserID   pgtype.UUID
+	Endpoint string      `json:"endpoint"`
+	UserID   pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) DeletePushSubscription(ctx context.Context, arg *DeletePushSubscriptionParams) error {
@@ -67,10 +67,10 @@ RETURNING id, user_id, endpoint, p256dh, auth, created_at
 `
 
 type UpsertPushSubscriptionParams struct {
-	UserID   pgtype.UUID
-	Endpoint string
-	P256dh   string
-	Auth     string
+	UserID   pgtype.UUID `json:"user_id"`
+	Endpoint string      `json:"endpoint"`
+	P256dh   string      `json:"p256dh"`
+	Auth     string      `json:"auth"`
 }
 
 func (q *Queries) UpsertPushSubscription(ctx context.Context, arg *UpsertPushSubscriptionParams) (*PushSubscription, error) {

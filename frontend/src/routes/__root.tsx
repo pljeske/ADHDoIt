@@ -8,7 +8,7 @@ export const rootRoute = createRootRoute({
   component: RootComponent,
 })
 
-const PUBLIC_PATHS = ['/login', '/register']
+const PUBLIC_PATHS = ['/login', '/register', '/auth/callback']
 
 function RootComponent() {
   const { setAccessToken, setRole, setAuthReady, logout, isAuthReady } = useAuthStore()

@@ -18,17 +18,17 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type CreateTodoParams struct {
-	UserID            pgtype.UUID
-	CategoryID        pgtype.UUID
-	Title             string
-	Description       pgtype.Text
-	Deadline          pgtype.Date
-	ReminderAt        pgtype.Timestamptz
-	Priority          int16
-	DurationMinutes   pgtype.Int4
-	Subtasks          []byte
-	RecurrenceRule    pgtype.Text
-	RecurrenceEndDate pgtype.Date
+	UserID            pgtype.UUID        `json:"user_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	Deadline          pgtype.Date        `json:"deadline"`
+	ReminderAt        pgtype.Timestamptz `json:"reminder_at"`
+	Priority          int16              `json:"priority"`
+	DurationMinutes   pgtype.Int4        `json:"duration_minutes"`
+	Subtasks          []byte             `json:"subtasks"`
+	RecurrenceRule    pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEndDate pgtype.Date        `json:"recurrence_end_date"`
 }
 
 func (q *Queries) CreateTodo(ctx context.Context, arg *CreateTodoParams) (*Todo, error) {
@@ -76,17 +76,17 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type CreateTodoFromRecurrenceParams struct {
-	UserID            pgtype.UUID
-	CategoryID        pgtype.UUID
-	Title             string
-	Description       pgtype.Text
-	Deadline          pgtype.Date
-	ReminderAt        pgtype.Timestamptz
-	Priority          int16
-	DurationMinutes   pgtype.Int4
-	Subtasks          []byte
-	RecurrenceRule    pgtype.Text
-	RecurrenceEndDate pgtype.Date
+	UserID            pgtype.UUID        `json:"user_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	Deadline          pgtype.Date        `json:"deadline"`
+	ReminderAt        pgtype.Timestamptz `json:"reminder_at"`
+	Priority          int16              `json:"priority"`
+	DurationMinutes   pgtype.Int4        `json:"duration_minutes"`
+	Subtasks          []byte             `json:"subtasks"`
+	RecurrenceRule    pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEndDate pgtype.Date        `json:"recurrence_end_date"`
 }
 
 func (q *Queries) CreateTodoFromRecurrence(ctx context.Context, arg *CreateTodoFromRecurrenceParams) (*Todo, error) {
@@ -132,8 +132,8 @@ DELETE FROM todos WHERE id = $1 AND user_id = $2
 `
 
 type DeleteTodoParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) DeleteTodo(ctx context.Context, arg *DeleteTodoParams) error {
@@ -146,8 +146,8 @@ SELECT id, user_id, category_id, title, description, deadline, reminder_at, remi
 `
 
 type GetTodoParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) GetTodo(ctx context.Context, arg *GetTodoParams) (*Todo, error) {
@@ -231,8 +231,8 @@ ORDER BY deadline ASC, priority DESC, created_at ASC
 `
 
 type ListTodosByCategoryParams struct {
-	UserID     pgtype.UUID
-	CategoryID pgtype.UUID
+	UserID     pgtype.UUID `json:"user_id"`
+	CategoryID pgtype.UUID `json:"category_id"`
 }
 
 func (q *Queries) ListTodosByCategory(ctx context.Context, arg *ListTodosByCategoryParams) ([]*Todo, error) {
@@ -329,8 +329,8 @@ ORDER BY deadline ASC, priority DESC, created_at ASC
 `
 
 type ListTodosOverdueParams struct {
-	UserID   pgtype.UUID
-	Timezone string
+	UserID   pgtype.UUID `json:"user_id"`
+	Timezone string      `json:"timezone"`
 }
 
 func (q *Queries) ListTodosOverdue(ctx context.Context, arg *ListTodosOverdueParams) ([]*Todo, error) {
@@ -381,8 +381,8 @@ ORDER BY priority DESC, deadline ASC, created_at ASC
 `
 
 type ListTodosTodayParams struct {
-	UserID   pgtype.UUID
-	Timezone string
+	UserID   pgtype.UUID `json:"user_id"`
+	Timezone string      `json:"timezone"`
 }
 
 func (q *Queries) ListTodosToday(ctx context.Context, arg *ListTodosTodayParams) ([]*Todo, error) {
@@ -433,8 +433,8 @@ ORDER BY deadline ASC, priority DESC, created_at ASC
 `
 
 type ListTodosUpcomingParams struct {
-	UserID   pgtype.UUID
-	Timezone string
+	UserID   pgtype.UUID `json:"user_id"`
+	Timezone string      `json:"timezone"`
 }
 
 func (q *Queries) ListTodosUpcoming(ctx context.Context, arg *ListTodosUpcomingParams) ([]*Todo, error) {
@@ -483,8 +483,8 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type ReopenTodoParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) ReopenTodo(ctx context.Context, arg *ReopenTodoParams) (*Todo, error) {
@@ -520,8 +520,8 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type SetTodoDoneParams struct {
-	ID     pgtype.UUID
-	UserID pgtype.UUID
+	ID     pgtype.UUID `json:"id"`
+	UserID pgtype.UUID `json:"user_id"`
 }
 
 func (q *Queries) SetTodoDone(ctx context.Context, arg *SetTodoDoneParams) (*Todo, error) {
@@ -557,9 +557,9 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type SnoozeTodoParams struct {
-	ID       pgtype.UUID
-	UserID   pgtype.UUID
-	Deadline pgtype.Date
+	ID       pgtype.UUID `json:"id"`
+	UserID   pgtype.UUID `json:"user_id"`
+	Deadline pgtype.Date `json:"deadline"`
 }
 
 func (q *Queries) SnoozeTodo(ctx context.Context, arg *SnoozeTodoParams) (*Todo, error) {
@@ -607,19 +607,19 @@ RETURNING id, user_id, category_id, title, description, deadline, reminder_at, r
 `
 
 type UpdateTodoParams struct {
-	ID                pgtype.UUID
-	UserID            pgtype.UUID
-	CategoryID        pgtype.UUID
-	Title             string
-	Description       pgtype.Text
-	Deadline          pgtype.Date
-	ReminderAt        pgtype.Timestamptz
-	ReminderJobID     pgtype.Int8
-	Priority          int16
-	DurationMinutes   pgtype.Int4
-	Subtasks          []byte
-	RecurrenceRule    pgtype.Text
-	RecurrenceEndDate pgtype.Date
+	ID                pgtype.UUID        `json:"id"`
+	UserID            pgtype.UUID        `json:"user_id"`
+	CategoryID        pgtype.UUID        `json:"category_id"`
+	Title             string             `json:"title"`
+	Description       pgtype.Text        `json:"description"`
+	Deadline          pgtype.Date        `json:"deadline"`
+	ReminderAt        pgtype.Timestamptz `json:"reminder_at"`
+	ReminderJobID     pgtype.Int8        `json:"reminder_job_id"`
+	Priority          int16              `json:"priority"`
+	DurationMinutes   pgtype.Int4        `json:"duration_minutes"`
+	Subtasks          []byte             `json:"subtasks"`
+	RecurrenceRule    pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEndDate pgtype.Date        `json:"recurrence_end_date"`
 }
 
 func (q *Queries) UpdateTodo(ctx context.Context, arg *UpdateTodoParams) (*Todo, error) {

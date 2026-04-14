@@ -32,3 +32,17 @@ RETURNING *;
 
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;
+
+-- name: GetUserByOIDCSubject :one
+SELECT id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject
+FROM users WHERE oidc_subject = $1;
+
+-- name: CreateOIDCUser :one
+INSERT INTO users (email, password_hash, name, timezone, oidc_subject)
+VALUES ($1, '', $2, $3, $4)
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject;
+
+-- name: LinkOIDCSubject :one
+UPDATE users SET oidc_subject = $2, updated_at = NOW()
+WHERE id = $1
+RETURNING id, email, password_hash, name, timezone, created_at, updated_at, role, oidc_subject;

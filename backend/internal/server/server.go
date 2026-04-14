@@ -24,7 +24,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 )
 
-func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClient *river.Client[pgx.Tx]) *http.Server {
+func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClient *river.Client[pgx.Tx], githubHandler *handler.GitHubHandler) *http.Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RealIP)
@@ -46,6 +46,7 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 	r.Use(middleware.Timeout(30_000_000_000)) // 30s
 
 	authHandler := handler.NewAuthHandler(queries, cfg)
+	configHandler := handler.NewConfigHandler(cfg)
 	categoryHandler := handler.NewCategoryHandler(queries)
 	todoHandler := handler.NewTodoHandler(queries, pool, riverClient, cfg)
 	pushHandler := handler.NewPushHandler(queries)
@@ -84,9 +85,17 @@ func New(cfg *config.Config, pool *pgxpool.Pool, queries *db.Queries, riverClien
 		loginLimiter := mw.NewRateLimiter(rate.Every(30*time.Second), 10)
 		refreshLimiter := mw.NewRateLimiter(rate.Every(10*time.Second), 15)
 
+		r.Get("/config", configHandler.GetConfig)
+
 		r.With(registerLimiter.Middleware).Post("/auth/register", authHandler.Register)
 		r.With(loginLimiter.Middleware).Post("/auth/login", authHandler.Login)
 		r.With(refreshLimiter.Middleware).Post("/auth/refresh", authHandler.Refresh)
+
+		// GitHub OAuth2 routes — only registered when GitHub is configured.
+		if githubHandler != nil {
+			r.Get("/auth/github/login", githubHandler.Login)
+			r.Get("/auth/github/callback", githubHandler.Callback)
+		}
 
 		// Authenticated routes
 		r.Group(func(r chi.Router) {
